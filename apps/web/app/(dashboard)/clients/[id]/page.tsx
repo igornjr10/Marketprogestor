@@ -6,7 +6,14 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { ArrowLeft, Wifi, WifiOff, RefreshCw, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
-import { getClient, getConnectUrl, checkMetaHealth, disconnectMeta } from '@/lib/clients'
+import {
+  getClient,
+  getConnectUrl,
+  checkMetaHealth,
+  disconnectMeta,
+  getSyncStatus,
+  triggerSync,
+} from '@/lib/clients'
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -170,6 +177,75 @@ export default function ClientDetailPage() {
           </div>
         )}
       </div>
+
+      {connection && <SyncStatusCard clientId={id} accessToken={accessToken} />}
+    </div>
+  )
+}
+
+function SyncStatusCard({ clientId, accessToken }: { clientId: string; accessToken: string | null }) {
+  const queryClient = useQueryClient()
+  const { data: syncStatus, isLoading } = useQuery({
+    queryKey: ['sync-status', clientId],
+    queryFn: () => getSyncStatus(clientId, accessToken ?? ''),
+    enabled: !!accessToken,
+    refetchInterval: 30000, // Refresh every 30s
+  })
+
+  const { mutate: triggerSyncMutation, isPending: isTriggering } = useMutation({
+    mutationFn: () => triggerSync(clientId, accessToken ?? ''),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['sync-status', clientId] })
+    },
+  })
+
+  return (
+    <div className="rounded-lg border bg-card p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Status de Sincronização</h3>
+        <button
+          onClick={() => triggerSyncMutation()}
+          disabled={isTriggering}
+          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isTriggering ? 'animate-spin' : ''}`} />
+          Atualizar agora
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : syncStatus ? (
+        <div className="space-y-4 text-sm">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-muted-foreground">Última sincronização</p>
+              <p className="font-medium">
+                {syncStatus.lastSync
+                  ? new Date(syncStatus.lastSync).toLocaleString('pt-BR')
+                  : 'Nunca'
+                }
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Próxima agendada</p>
+              <p className="font-medium">
+                {new Date(syncStatus.nextScheduled).toLocaleString('pt-BR')}
+              </p>
+            </div>
+          </div>
+          <div>
+            <Link
+              href={`/clients/${clientId}/sync-logs`}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Ver histórico de logs de sincronização
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Erro ao carregar status</p>
+      )}
     </div>
   )
 }

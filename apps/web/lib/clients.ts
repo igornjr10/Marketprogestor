@@ -1,5 +1,12 @@
 import { apiFetch } from './api'
-import type { Client, CreateClientInput, MetaCallbackResult, FinalizeMetaInput } from '@marketproads/types'
+import type {
+  Client,
+  CreateClientInput,
+  MetaCallbackResult,
+  FinalizeMetaInput,
+  SyncStatus,
+  SyncLogPage,
+} from '@marketproads/types'
 
 type ClientDetail = Client & {
   metaConnections: Array<{
@@ -70,4 +77,23 @@ export async function checkMetaHealth(
 
 export async function disconnectMeta(id: string, token: string): Promise<void> {
   return apiFetch<void>(`/clients/${id}/meta`, { method: 'DELETE', token })
+}
+
+export async function getSyncStatus(id: string, token: string): Promise<SyncStatus> {
+  return apiFetch<SyncStatus>(`/clients/${id}/sync/status`, { token })
+}
+
+export async function triggerSync(id: string, token: string): Promise<void> {
+  return apiFetch<void>(`/clients/${id}/sync/trigger`, { method: 'POST', token })
+}
+
+export async function getSyncLogs(
+  id: string,
+  token: string,
+  page = 1,
+  limit = 20,
+): Promise<SyncLogPage> {
+  return apiFetch<SyncLogPage>(`/clients/${id}/sync/logs?page=${page}&limit=${limit}`, {
+    token,
+  })
 }
