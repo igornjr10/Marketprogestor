@@ -1,1 +1,129 @@
+# Projeto: Plataforma de Gestão de Tráfego Pago — MarketProAds
 
+## Identidade do Projeto
+Plataforma SaaS interna (V1) para gestão de campanhas Meta Ads (Facebook + Instagram), construída para uso da MarketProAds e preparada para escalar como produto multi-tenant.
+
+## Stack Obrigatória (NÃO QUESTIONE, NÃO SUBSTITUA)
+
+### Backend
+- Node.js 20 LTS
+- NestJS 10 (arquitetura modular, decorators)
+- Prisma 5 (ORM)
+- PostgreSQL 16
+- Redis 7 (cache + filas)
+- BullMQ (workers)
+- Zod (validação)
+- Jest (testes)
+
+### Frontend
+- Next.js 15 (App Router, Server Components quando possível)
+- TypeScript strict mode
+- Tailwind CSS + shadcn/ui
+- TanStack Query (server state)
+- Zustand (client state)
+- React Hook Form + Zod
+- Recharts (gráficos)
+
+### Estrutura do Repositório (monorepo Turborepo)
+apps/
+web/          # Next.js
+api/          # NestJS
+workers/      # BullMQ workers
+packages/
+database/     # Prisma schema + client
+types/        # Tipos compartilhados
+config/       # ESLint, TS, Tailwind configs
+
+## Regras Invioláveis
+
+### Segurança
+1. **NUNCA** hardcode secrets, tokens, API keys. Sempre `process.env.X` validado com Zod.
+2. **NUNCA** retorne tokens da Meta API em responses. Sempre criptografados em repouso (AES-256-GCM).
+3. **NUNCA** logue dados sensíveis (tokens, senhas, dados pessoais de clientes finais).
+4. **SEMPRE** valide input com Zod antes de qualquer lógica de negócio.
+5. **SEMPRE** use parameterized queries (Prisma já faz, mas atenção em raw queries).
+
+### Multi-tenancy
+1. **TODA** entidade tenant-aware deve ter `tenantId` obrigatório no schema.
+2. **TODA** query deve filtrar por `tenantId` via middleware Prisma.
+3. **NUNCA** confie no `tenantId` vindo do body/query — sempre extraia do JWT.
+4. Existe um middleware Prisma chamado `tenantGuard` — NUNCA o desabilite sem revisão.
+
+### Meta API
+1. **NUNCA** chame a Meta API diretamente do frontend.
+2. **SEMPRE** vá pelo serviço `MetaApiAdapter` (camada de abstração).
+3. **SEMPRE** trate rate limit (erros 4, 17, 32, 613) com backoff exponencial.
+4. **NUNCA** sincronize dados em tempo real no request do usuário — use BullMQ.
+5. Tokens são SEMPRE System User Tokens, nunca User Access Tokens em produção.
+
+### Código
+1. **TypeScript strict**. Sem `any` (use `unknown` quando necessário).
+2. **Sem comentários inúteis**. Comente apenas o "porquê" de decisões não óbvias.
+3. **Funções pequenas**. Máximo 30 linhas. Se passar, refatore.
+4. **Testes** para toda lógica de negócio. Mínimo 70% coverage no domínio.
+5. **Commits convencionais**: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
+6. **Nunca** crie arquivos fora da estrutura definida sem perguntar.
+
+### Dados
+1. Toda mutação relevante gera `AuditLog` (quem, o quê, quando, antes/depois).
+2. Métricas calculadas SEMPRE no domínio, nunca no banco ou no frontend.
+3. Cache obrigatório para qualquer endpoint que consulte mais de 100 registros.
+
+## Convenções de Nomenclatura
+
+- **Arquivos**: kebab-case (`meta-api-adapter.ts`)
+- **Classes/Tipos**: PascalCase (`MetaApiAdapter`)
+- **Funções/Variáveis**: camelCase (`syncCampaigns`)
+- **Constantes**: SCREAMING_SNAKE_CASE (`MAX_RETRY_ATTEMPTS`)
+- **Tabelas DB**: snake_case plural (`ad_accounts`, `audit_logs`)
+- **Endpoints REST**: kebab-case plural (`/ad-accounts`, `/audit-logs`)
+
+## Como Você (Claude Code) Deve Trabalhar
+
+### Antes de começar uma tarefa
+1. Leia este `CLAUDE.md` integralmente.
+2. Leia o schema Prisma atual (`packages/database/schema.prisma`).
+3. Leia a estrutura de módulos existente.
+4. Pergunte se algo na tarefa parecer ambíguo — NÃO assuma.
+
+### Durante a execução
+1. Faça commits pequenos e atômicos.
+2. Rode `npm run lint` e `npm run typecheck` antes de finalizar.
+3. Escreva testes ANTES ou junto da implementação, nunca depois.
+4. Se identificar um problema fora do escopo da tarefa, registre em `TODO.md` em vez de "consertar enquanto está aqui".
+
+### Ao finalizar
+1. Resuma o que foi feito em bullets.
+2. Liste arquivos criados/modificados.
+3. Liste o que NÃO foi feito (escopo cortado, débito técnico).
+4. Sugira a próxima tarefa lógica.
+
+## Anti-padrões — NÃO FAÇA
+
+- ❌ Criar microserviços (use monolito modular).
+- ❌ Usar MongoDB, Firebase, Supabase como banco principal.
+- ❌ Adicionar bibliotecas sem justificativa (cada dep aumenta bundle/CVE risk).
+- ❌ Server Actions complexas no Next.js — prefira API routes do NestJS.
+- ❌ Lógica de negócio no controller — sempre em services.
+- ❌ Buscar dados de Meta API no render do frontend.
+- ❌ Inventar endpoint da Meta API. Se não tem certeza, consulte docs oficiais.
+- ❌ Criar tabela sem migration explícita.
+- ❌ Usar `prisma db push` em produção (apenas `migrate deploy`).
+
+## Dependência de Documentação
+
+Quando estiver em dúvida sobre Meta API, consulte:
+- https://developers.facebook.com/docs/marketing-api
+- https://developers.facebook.com/docs/marketing-api/reference
+
+Quando estiver em dúvida sobre Prisma, NestJS, Next.js, consulte as docs oficiais antes de inventar.
+
+## Critério de Sucesso de uma Sessão
+
+Uma sessão sua é "boa" quando:
+- Código compila sem warnings.
+- Testes passam.
+- Lint passa.
+- A funcionalidade pedida foi entregue, mesmo que parcial.
+- Você documentou claramente o que ficou pendente.
+- Não introduziu débito técnico sem registrar.
