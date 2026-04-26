@@ -32,6 +32,26 @@ enum MetaConnectionStatus {
   ERROR
 }
 
+enum InsightEntityType {
+  CAMPAIGN
+  ADSET
+  AD
+}
+
+enum SyncJobType {
+  STRUCTURE
+  INSIGHTS_FRESH
+  INSIGHTS_HISTORICAL
+  CREATIVES
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 // ============================================================
 // TENANT
 // ============================================================
@@ -139,6 +159,7 @@ model Client {
   tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   metaConnections MetaConnection[]
   adAccounts      MetaAdAccount[]
+  syncLogs        SyncLog[]
 
   @@index([tenantId])
   @@map("clients")
@@ -191,9 +212,134 @@ model MetaAdAccount {
 
   client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   metaConnection MetaConnection @relation(fields: [metaConnectionId], references: [id], onDelete: Cascade)
+  campaigns      Campaign[]
 
   @@unique([clientId, accountId])
   @@index([clientId])
   @@index([metaConnectionId])
   @@map("meta_ad_accounts")
+}
+
+// ============================================================
+// CAMPAIGN
+// ============================================================
+
+model Campaign {
+  id             String    @id @default(cuid())
+  adAccountId    String
+  metaCampaignId String    @unique
+  name           String
+  objective      String
+  status         String
+  dailyBudget    Float?
+  lifetimeBudget Float?
+  startTime      DateTime
+  stopTime       DateTime?
+  createdTime    DateTime
+  updatedTime    DateTime
+  lastSyncedAt   DateTime?
+
+  adAccount MetaAdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  adSets    AdSet[]
+
+  @@index([adAccountId])
+  @@index([metaCampaignId])
+  @@map("campaigns")
+}
+
+// ============================================================
+// AD SET
+// ============================================================
+
+model AdSet {
+  id               String    @id @default(cuid())
+  campaignId       String
+  metaAdSetId      String    @unique
+  name             String
+  status           String
+  dailyBudget      Float?
+  lifetimeBudget   Float?
+  targeting        Json
+  optimizationGoal String
+  billingEvent     String
+  startTime        DateTime
+  endTime          DateTime?
+  createdTime      DateTime
+  updatedTime      DateTime
+  lastSyncedAt     DateTime?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads      Ad[]
+
+  @@index([campaignId])
+  @@index([metaAdSetId])
+  @@map("ad_sets")
+}
+
+// ============================================================
+// AD
+// ============================================================
+
+model Ad {
+  id            String    @id @default(cuid())
+  adSetId       String
+  metaAdId      String    @unique
+  name          String
+  status        String
+  creativeId    String
+  creativeData  Json
+  createdTime   DateTime
+  updatedTime   DateTime
+  lastSyncedAt  DateTime?
+
+  adSet AdSet @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+
+  @@index([adSetId])
+  @@index([metaAdId])
+  @@map("ads")
+}
+
+// ============================================================
+// INSIGHT
+// ============================================================
+
+model Insight {
+  id           String             @id @default(cuid())
+  entityType   InsightEntityType
+  entityId     String
+  date         DateTime
+  spend        Float
+  impressions  Int
+  reach        Int
+  clicks       Int
+  conversions  Json
+  videoMetrics Json
+  breakdowns   Json?
+  raw          Json
+
+  @@index([entityType, entityId, date])
+  @@map("insights")
+}
+
+// ============================================================
+// SYNC LOG
+// ============================================================
+
+model SyncLog {
+  id             String       @id @default(cuid())
+  clientId       String
+  jobType        SyncJobType
+  status         SyncStatus   @default(PENDING)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  itemsProcessed Int          @default(0)
+  error          String?
+  durationMs     Int?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([jobType])
+  @@index([status])
+  @@map("sync_logs")
 }
