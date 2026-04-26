@@ -14,11 +14,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "outDir": "./dist",
-    "rootDir": "src",
+    "rootDir": "../..",
     "baseUrl": ".",
     "paths": {
       "@marketproads/database": ["../../packages/database/src/index.ts"],
-      "@marketproads/types": ["../../packages/types/src/index.ts"]
+      "@marketproads/types": ["../../packages/types/src/index.ts"],
+      "@marketproads/crypto": ["../../packages/crypto/src/index.ts"]
     }
   },
   "include": ["src/**/*"],
