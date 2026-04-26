@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowLeft, Wifi, WifiOff, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Wifi, WifiOff, RefreshCw, Trash2, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import {
   getClient,
@@ -14,6 +14,7 @@ import {
   getSyncStatus,
   triggerSync,
 } from '@/lib/clients'
+import { getClientInsights } from '@/lib/campaigns'
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -179,6 +180,7 @@ export default function ClientDetailPage() {
       </div>
 
       {connection && <SyncStatusCard clientId={id} accessToken={accessToken} />}
+      {connection && <InsightsSummaryCard clientId={id} accessToken={accessToken} />}
     </div>
   )
 }
@@ -245,6 +247,59 @@ function SyncStatusCard({ clientId, accessToken }: { clientId: string; accessTok
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">Erro ao carregar status</p>
+      )}
+    </div>
+  )
+}
+
+function InsightsSummaryCard({ clientId, accessToken }: { clientId: string; accessToken: string | null }) {
+  const { data: insights, isLoading } = useQuery({
+    queryKey: ['insights', clientId, 30],
+    queryFn: () => getClientInsights(clientId, accessToken ?? '', 30),
+    enabled: !!accessToken,
+  })
+
+  const fmt = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+  return (
+    <div className="rounded-lg border bg-card p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <BarChart2 className="h-4 w-4" /> Resumo (últimos 30 dias)
+        </h3>
+        <Link
+          href={`/clients/${clientId}/campaigns`}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Ver campanhas →
+        </Link>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : insights ? (
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <div>
+            <p className="text-muted-foreground">Investimento</p>
+            <p className="font-semibold text-lg">{fmt(insights.totals.spend)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Impressões</p>
+            <p className="font-semibold text-lg">{new Intl.NumberFormat('pt-BR').format(insights.totals.impressions)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Cliques</p>
+            <p className="font-semibold text-lg">{new Intl.NumberFormat('pt-BR').format(insights.totals.clicks)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">CTR</p>
+            <p className="font-semibold text-lg">{insights.totals.ctr}%</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Nenhuma métrica disponível. Aguarde a primeira sincronização.
+        </p>
       )}
     </div>
   )
