@@ -127,7 +127,7 @@ export default function CampaignsPage() {
                     />
                     <YAxis tick={{ fontSize: 11 }} width={50} />
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), 'Investimento']}
+                      formatter={(value) => [formatCurrency(Number(value)), 'Investimento']}
                       labelFormatter={(label) => `Data: ${label}`}
                     />
                     <Area

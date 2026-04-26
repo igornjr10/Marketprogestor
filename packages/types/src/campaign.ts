@@ -76,3 +76,52 @@ export type ClientInsights = {
   totals: InsightTotals
   byDate: InsightByDate[]
 }
+
+export type OverviewKpis = {
+  spend: number
+  impressions: number
+  reach: number
+  clicks: number
+  ctr: number
+  cpm: number
+  cpc: number
+}
+
+export type OverviewResponse = {
+  current: OverviewKpis
+  previous: OverviewKpis | null
+  deltas: Record<string, number | null> | null
+}
+
+export type TimeSeriesPoint = {
+  date: string
+  spend: number
+  impressions: number
+  clicks: number
+  reach: number
+  ctr: number
+  cpm: number
+  cpc: number
+}
+
+export type CampaignMetrics = {
+  spend: number
+  impressions: number
+  clicks: number
+  reach: number
+  ctr: number
+  cpm: number
+  cpc: number
+}
+
+export type CampaignWithMetrics = Campaign & { metrics: CampaignMetrics }
+
+export type CampaignMetricsPage = {
+  campaigns: CampaignWithMetrics[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
