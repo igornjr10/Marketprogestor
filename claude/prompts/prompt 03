@@ -1,0 +1,67 @@
+Leia CLAUDE.md. Verifique o estado atual do projeto antes de começar.
+
+Sua tarefa: implementar a conexão completa com Meta Ads.
+
+PRÉ-REQUISITO: as variáveis META_APP_ID, META_APP_SECRET, META_REDIRECT_URI 
+já estão no .env. NÃO peça por elas.
+
+1. SCHEMA — adicione ao Prisma:
+   - Client (id, tenantId, name, status, createdAt, updatedAt)
+   - MetaConnection (id, clientId, businessId, systemUserId, 
+     accessTokenEncrypted, scopes Json, status, expiresAt nullable, 
+     lastValidatedAt, createdAt, updatedAt)
+   - MetaAdAccount (id, clientId, metaConnectionId, accountId, name, 
+     currency, timezone, status, lastSyncedAt, createdAt, updatedAt)
+   
+   Migrations criadas e aplicadas.
+
+2. CRIPTOGRAFIA
+   - Crie packages/crypto com função encrypt/decrypt usando AES-256-GCM
+   - Chave vem de ENCRYPTION_KEY no .env (32 bytes hex)
+   - Tokens NUNCA persistem em texto puro
+
+3. META API ADAPTER (apps/api/src/integrations/meta/)
+   - Classe MetaApiAdapter com métodos:
+     * exchangeCodeForToken(code)
+     * getLongLivedToken(shortToken)
+     * getBusinesses(token)
+     * getAdAccounts(token, businessId)
+     * createSystemUser(token, businessId)
+     * getSystemUserToken(systemUserId)
+     * validateToken(token)
+   - Tratamento de erros: rate limit (4, 17, 32, 613) com backoff exponencial
+   - Logger estruturado (sem expor tokens)
+   - Versionamento da API explícito: v21.0
+
+4. ENDPOINTS (apps/api/src/clients/)
+   - GET /clients (lista clients do tenant)
+   - POST /clients (cria client)
+   - GET /clients/:id
+   - DELETE /clients/:id (soft delete)
+   - GET /clients/:id/meta/connect-url (gera URL OAuth)
+   - GET /clients/:id/meta/callback (recebe code, troca por token, lista BMs)
+   - POST /clients/:id/meta/finalize (recebe businessId + adAccountIds 
+     selecionados, cria System User, salva tudo)
+   - GET /clients/:id/meta/health (valida token atual)
+   - DELETE /clients/:id/meta (desconecta)
+
+5. FRONTEND (apps/web)
+   - /clients — lista de clients com botão "Novo client"
+   - /clients/new — formulário simples
+   - /clients/[id] — visão geral do client
+   - /clients/[id]/connect — fluxo de conexão Meta:
+     * Botão "Conectar Meta"
+     * Redireciona para OAuth
+     * Callback mostra Business Managers disponíveis
+     * Usuário seleciona BM e Ad Accounts
+     * Salva e redireciona para visão geral
+   - Estado de saúde da conexão visível na visão geral
+
+CRITÉRIO DE ACEITAÇÃO:
+- Consigo conectar uma conta Meta de teste de ponta a ponta
+- Token persiste criptografado (verifique no banco — deve ser ilegível)
+- Health check retorna status correto
+- Desconectar limpa tudo
+- Testes cobrindo: criptografia, adapter (com mock), fluxo de finalização
+
+NÃO toque em sync de dados — isso é a Semana 3.

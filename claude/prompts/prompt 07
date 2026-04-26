@@ -1,0 +1,54 @@
+Leia CLAUDE.md. Verifique estado.
+
+Tarefa: edição operacional de campanhas com segurança.
+
+1. DOMÍNIO (apps/api/src/campaigns/)
+   - Service CampaignManagementService:
+     * toggleStatus(entityType, entityId, newStatus, userId)
+     * updateBudget(entityType, entityId, budgetType, value, userId)
+     * duplicateCampaign(campaignId, options, userId)
+   - TODA mutação:
+     1. Cria entrada em AuditLog (before/after)
+     2. Chama Meta API
+     3. Atualiza banco local
+     4. Invalida cache relevante
+     5. Retorna resultado
+
+2. SEGURANÇA DE EDIÇÃO
+   - Endpoint exige confirmação dupla para mudanças de orçamento > 50%
+   - Implementar dry-run: POST /campaigns/:id/dry-run com payload
+     Retorna o que aconteceria SEM executar
+   - Idempotency keys obrigatórias em mutations
+   - Rate limit: max 30 mutations por minuto por usuário
+
+3. ENDPOINTS
+   - PATCH /campaigns/:id (status, dailyBudget, lifetimeBudget)
+   - PATCH /adsets/:id (status, dailyBudget, lifetimeBudget)
+   - PATCH /ads/:id (status)
+   - POST /campaigns/:id/duplicate
+   - GET /audit-logs?entityType=CAMPAIGN&entityId=X (histórico)
+
+4. FRONTEND
+   - Toggle de status inline na tabela (com confirmação se for desligar)
+   - Editor de orçamento via modal com:
+     * Valor atual visível
+     * Input do novo valor
+     * Indicador visual se mudança > 50% (com confirmação extra)
+     * Preview do impacto (dry-run)
+   - Botão "Duplicar" abre wizard:
+     * Novo nome
+     * Novo orçamento (opcional)
+     * Replicar criativos? (sim/não)
+   - Aba "Histórico" em cada entidade mostrando AuditLog
+
+5. TRATAMENTO DE ERROS
+   - Erro Meta API → mostrar mensagem clara em português
+   - Falha de sync após edição → flag visual de "dessincronizado"
+   - Logs estruturados para todas as mutations
+
+CRITÉRIO DE ACEITAÇÃO:
+- Posso pausar/ativar campanha do dashboard
+- Posso editar orçamento com segurança
+- Audit log mostra quem fez o quê
+- Mudanças refletem no Ads Manager nativo
+- Testes: dry-run, double-confirm, idempotency

@@ -1,0 +1,57 @@
+Leia CLAUDE.md e revise o estado atual.
+
+Tarefa: implementar sync confiável de dados Meta Ads.
+
+1. SCHEMA — adicione:
+   - Campaign (id, adAccountId, metaCampaignId UNIQUE, name, objective, 
+     status, dailyBudget nullable, lifetimeBudget nullable, startTime, 
+     stopTime nullable, createdTime, updatedTime, lastSyncedAt)
+   - AdSet (id, campaignId, metaAdSetId UNIQUE, name, status, 
+     dailyBudget nullable, lifetimeBudget nullable, targeting Json, 
+     optimizationGoal, billingEvent, startTime, endTime nullable, 
+     createdTime, updatedTime, lastSyncedAt)
+   - Ad (id, adSetId, metaAdId UNIQUE, name, status, creativeId, 
+     creativeData Json, createdTime, updatedTime, lastSyncedAt)
+   - Insight (id, entityType enum [CAMPAIGN, ADSET, AD], entityId, 
+     date, spend, impressions, reach, clicks, conversions Json, 
+     videoMetrics Json, breakdowns Json nullable, raw Json)
+     * PARTITION BY RANGE (date) — particionamento por mês
+     * Índice composto (entityType, entityId, date)
+   - SyncLog (id, clientId, jobType, status, startedAt, finishedAt, 
+     itemsProcessed, error nullable, durationMs)
+
+2. WORKERS (apps/workers)
+   - Job: sync-structure (campanhas → adsets → ads), 1h
+   - Job: sync-insights-fresh (últimos 3 dias, granularidade dia), 15min
+   - Job: sync-insights-historical (60 dias), diário às 3h da manhã
+   - Job: sync-creatives (preview, thumbnail, copy), 6h
+   - Concorrência limitada por client (semáforo Redis)
+   - Retry com backoff exponencial (max 5 tentativas)
+   - Dead letter queue para falhas persistentes
+
+3. RATE LIMIT HANDLER
+   - Detectar headers X-Business-Use-Case-Usage, X-App-Usage
+   - Pausar job quando uso >= 80%
+   - Retomar após cool-down (Redis com TTL)
+   - Logger com nível de uso atual
+
+4. ENDPOINTS
+   - GET /clients/:id/sync/status (último sync, próximo agendado)
+   - POST /clients/:id/sync/trigger (força sync, com cooldown de 5min)
+   - GET /clients/:id/sync/logs (histórico, paginado)
+
+5. FRONTEND
+   - Em /clients/[id], card "Status de Sincronização"
+   - Mostra: última atualização, próxima prevista, botão "Atualizar agora"
+   - Loading state quando sync está rodando
+   - Histórico em /clients/[id]/sync-logs
+
+CRITÉRIO DE ACEITAÇÃO:
+- Cliente conectado tem dados sincronizando automaticamente
+- Posso disparar sync manual e ver progresso
+- Banco populado com campanhas, adsets, ads e insights reais
+- Tabela Insight particionada (verifique \d+ insights no psql)
+- Rate limit não derruba o sistema (teste com client de muitos dados)
+- Testes: rate limit handler, mapper Meta→DB, partition criada corretamente
+
+NÃO crie dashboard ainda 

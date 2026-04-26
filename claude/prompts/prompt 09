@@ -1,0 +1,68 @@
+Leia CLAUDE.md.
+
+Tarefa: sistema de alertas configurável e útil.
+
+1. SCHEMA
+   - Alert (id, tenantId, clientId nullable, name, description, 
+     ruleJson, channels Json, cooldownMinutes, isActive, createdAt, 
+     updatedAt, createdBy)
+     * ruleJson exemplo: 
+       { metric: "cpa", comparator: "gt", value: 50, 
+         period: "3d", entityType: "CAMPAIGN" }
+   - AlertEvent (id, alertId, triggeredAt, entityType, entityId, 
+     entityName, metricValue, ruleSnapshot Json, status, resolvedAt nullable)
+
+2. ENGINE DE ALERTAS (apps/workers)
+   - Job: evaluate-alerts (a cada 15min, junto com sync de insights)
+   - Para cada alerta ativo:
+     * Carrega regra
+     * Avalia contra dados atualizados
+     * Se disparar e não em cooldown → cria AlertEvent + envia notificação
+   - DSL simples para regras:
+     * Métricas: spend, cpa, cpl, roas, ctr, cpm, frequency
+     * Comparators: gt, gte, lt, lte, eq, change_pct
+     * Períodos: 1d, 3d, 7d, 14d, 30d
+     * Combinações com AND/OR (até 3 condições)
+
+3. ALERTAS PRÉ-CONFIGURADOS (templates)
+   - "CPA acima da meta por 3 dias"
+   - "Frequência alta com queda de CTR"
+   - "Gasto acelerado (>50% do diário até meio-dia)"
+   - "Anúncio rejeitado"
+   - "Pixel sem disparar eventos há 6h"
+   - "ROAS abaixo de 1 por 7 dias"
+   - "Campanha pausada inesperadamente"
+
+4. CANAIS DE NOTIFICAÇÃO
+   - Email (via Resend)
+   - Dashboard (badge + página /alerts)
+   - Webhook (preparar estrutura, mas não implementar agora)
+
+5. ENDPOINTS
+   - GET /alerts (lista do tenant)
+   - POST /alerts (criar)
+   - PATCH /alerts/:id
+   - DELETE /alerts/:id
+   - GET /alerts/:id/events (histórico de disparos)
+   - POST /alerts/:id/test (dispara teste para validar regra)
+   - GET /alert-events?status=open (todos os alertas abertos do tenant)
+   - PATCH /alert-events/:id (marcar como resolvido)
+
+6. FRONTEND
+   - /alerts — lista de alertas configurados
+   - /alerts/new — builder visual:
+     * Step 1: nome + cliente (ou todos)
+     * Step 2: condição (dropdown métrica + comparador + valor + período)
+     * Step 3: ações (canais, cooldown)
+     * Step 4: revisão + teste
+   - /alert-events — central de alertas disparados
+     * Filtros: aberto/resolvido, cliente, severidade
+     * Ações em lote
+   - Sino no header com badge contagem de alertas abertos
+
+CRITÉRIO DE ACEITAÇÃO:
+- Posso criar alerta visualmente
+- Alerta dispara corretamente quando condição atende
+- Email chega bonito (template HTML)
+- Cooldown evita spam
+- Testes: engine de avaliação, todos os comparators, cooldown

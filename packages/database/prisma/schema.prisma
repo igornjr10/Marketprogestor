@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum MetaConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+// ============================================================
+// TENANT
+// ============================================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  auditLogs AuditLog[]
+  clients   Client[]
+
+  @@map("tenants")
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id              String   @id @default(cuid())
+  email           String
+  passwordHash    String
+  name            String
+  role            UserRole @default(ANALYST)
+  twoFactorSecret String?
+  tenantId        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@unique([email, tenantId])
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================================
+// SESSION
+// ============================================================
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  tenantId   String
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// CLIENT
+// ============================================================
+
+model Client {
+  id       String       @id @default(cuid())
+  tenantId String
+  name     String
+  status   ClientStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metaConnections MetaConnection[]
+  adAccounts      MetaAdAccount[]
+
+  @@index([tenantId])
+  @@map("clients")
+}
+
+// ============================================================
+// META CONNECTION
+// ============================================================
+
+model MetaConnection {
+  id                   String               @id @default(cuid())
+  clientId             String
+  businessId           String
+  businessName         String
+  systemUserId         String?
+  accessTokenEncrypted String
+  scopes               Json
+  status               MetaConnectionStatus @default(ACTIVE)
+  expiresAt            DateTime?
+  lastValidatedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client     Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  adAccounts MetaAdAccount[]
+
+  @@unique([clientId])
+  @@index([clientId])
+  @@map("meta_connections")
+}
+
+// ============================================================
+// META AD ACCOUNT
+// ============================================================
+
+model MetaAdAccount {
+  id               String    @id @default(cuid())
+  clientId         String
+  metaConnectionId String
+  accountId        String
+  name             String
+  currency         String
+  timezone         String
+  status           String
+  lastSyncedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  metaConnection MetaConnection @relation(fields: [metaConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, accountId])
+  @@index([clientId])
+  @@index([metaConnectionId])
+  @@map("meta_ad_accounts")
+}

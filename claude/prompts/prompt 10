@@ -1,0 +1,73 @@
+Leia CLAUDE.md.
+
+Tarefa: relatórios profissionais para entregar ao cliente final.
+
+1. SCHEMA
+   - Report (id, tenantId, clientId, name, period Json, 
+     templateId, data Json, status, fileUrl nullable, shareToken nullable, 
+     shareExpiresAt nullable, scheduleId nullable, createdAt, sentAt nullable)
+   - ReportTemplate (id, tenantId, name, sections Json, branding Json, 
+     isDefault)
+   - ReportSchedule (id, tenantId, clientId, templateId, cron, 
+     emailRecipients Json, isActive, lastRunAt, nextRunAt)
+
+2. GERAÇÃO DE PDF
+   - Use Puppeteer (headless Chromium) — renderiza HTML em PDF
+   - Template HTML em packages/types ou apps/api/templates/reports/
+   - CSS print-friendly (page breaks, headers/footers)
+   - Renderizar gráficos como imagens (Chart.js server-side ou screenshot)
+   - Branding configurável: logo, cores, nome da agência
+   - Multi-página com sumário
+
+3. SEÇÕES DO RELATÓRIO PADRÃO
+   - Capa com logo + período + nome do cliente
+   - Resumo executivo (3-4 KPIs principais + comparativo)
+   - Investimento e resultados (gráfico de evolução)
+   - Top 5 campanhas
+   - Top 5 criativos (com preview)
+   - Análise de público (breakdowns)
+   - Recomendações (texto editável)
+   - Rodapé com branding
+
+4. COMPARTILHAMENTO
+   - Link único: /share/reports/[token]
+   - Token UUID v4, expira em N dias (configurável)
+   - Página pública (sem auth) que mostra o relatório renderizado
+   - Track de visualizações (quantas vezes foi aberto)
+   - Botão "Download PDF" na página pública
+
+5. AGENDAMENTO
+   - Worker job: process-report-schedules (a cada 1h)
+   - Verifica nextRunAt, gera relatório, envia email
+   - Suporte a cron: semanal (segunda 9h), mensal (dia 1, 9h), custom
+   - Email com PDF anexo + link de visualização online
+
+6. ENDPOINTS
+   - GET /clients/:id/reports
+   - POST /clients/:id/reports (geração sob demanda)
+   - GET /reports/:id (detalhes + status)
+   - GET /reports/:id/pdf (download)
+   - POST /reports/:id/share (gera shareToken)
+   - GET /share/reports/:token (público, sem auth)
+   - CRUD /report-schedules
+   - GET /report-templates
+   - POST /report-templates (custom)
+
+7. FRONTEND
+   - /clients/[id]/reports — lista de relatórios gerados
+   - Botão "Gerar relatório" com modal:
+     * Período
+     * Template
+     * Recomendações (textarea)
+     * Preview antes de gerar
+   - /report-schedules — agendamentos
+   - Página de configuração de branding (logo, cores) por tenant
+
+CRITÉRIO DE ACEITAÇÃO:
+- Gero PDF de qualidade profissional
+- Branding personalizável funciona
+- Link compartilhável abre em qualquer device
+- Agendamento dispara emails corretamente
+- Performance: relatório de 30 dias gera em < 30s
+
+🎯 MARCO: sistema substitui 80% do uso do Ads Manager.

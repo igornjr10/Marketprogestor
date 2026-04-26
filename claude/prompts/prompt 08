@@ -1,0 +1,61 @@
+Leia CLAUDE.md. Verifique estado.
+
+Tarefa: análise profunda de criativos e públicos.
+
+1. DOMÍNIO
+   - Service CreativeAnalysisService:
+     * getCreativesGallery(clientId, period, filters, sort)
+     * getCreativeMetrics(adId, period) — inclui hook rate, hold rate
+     * detectFatigue(adId, period) — algoritmo descrito abaixo
+     * getCreativeRanking(clientId, period, criteria)
+   - Service AudienceAnalysisService:
+     * getBreakdown(clientId, period, dimension)
+       dimension: age, gender, placement, device, platform, country, region
+     * getHeatmap(clientId, period, dim1, dim2)
+
+2. ALGORITMO DE FADIGA
+baselineCTR = média móvel CTR primeiros 7 dias do criativo
+currentCTR = CTR últimos 3 dias
+delta = (baselineCTR - currentCTR) / baselineCTR
+freq = frequência últimos 3 dias
+if delta > 0.40 && freq > 3.5: fatigue = SEVERE
+else if delta > 0.25 && freq > 2.5: fatigue = MODERATE
+else: fatigue = NONE
+
+3. SYNC ADICIONAL DE CRIATIVOS
+   - Buscar de Meta API: thumbnail_url, image_url, video_id, body, title
+   - Cachear thumbnails em Cloudflare R2 (storage)
+   - Atualizar a cada 6h ou sob demanda
+
+4. ENDPOINTS
+   - GET /clients/:id/creatives?period=7d&fatigue=true&sort=spend:desc
+   - GET /creatives/:adId/details
+   - GET /creatives/:adId/timeline
+   - GET /clients/:id/breakdowns?dimension=age&period=7d
+   - GET /clients/:id/breakdowns/heatmap?dim1=age&dim2=placement
+
+5. FRONTEND
+   - /clients/[id]/creatives — galeria com cards:
+     * Thumbnail/preview (vídeo com hover-to-play)
+     * Métricas chave: spend, CTR, CPA, frequência
+     * Hook rate e hold rate (se vídeo)
+     * Badge de fadiga (verde/amarelo/vermelho)
+     * Click abre detalhe lateral (drawer)
+   - /clients/[id]/audiences — visualizações:
+     * Tabs: Idade, Gênero, Posicionamento, Dispositivo, Plataforma, Região
+     * Cada tab mostra gráfico de barras + tabela
+     * Heatmap interativo (idade × posicionamento)
+   - Filtros persistem na URL (compartilháveis)
+
+6. UX
+   - Carregamento progressivo (cards aparecem como streaming)
+   - Imagens lazy-loaded
+   - Filtros aplicados com debounce
+   - Empty states amigáveis
+
+CRITÉRIO DE ACEITAÇÃO:
+- Galeria de criativos funcional com thumbnails
+- Fadiga calculada corretamente (validar com casos manuais)
+- Breakdowns mostram dados consistentes com Ads Manager
+- Performance: galeria com 100+ criativos carrega suave
+- Testes: algoritmo de fadiga, agregação de métricas

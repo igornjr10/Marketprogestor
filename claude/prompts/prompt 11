@@ -1,0 +1,73 @@
+Leia CLAUDE.md.
+
+Tarefa: ferramenta de auditoria que vira diferencial competitivo.
+
+1. ENGINE DE CHECKS (apps/api/src/audit/)
+   - Interface AuditCheck:
+     {
+       id, name, category, severity, run(client) → AuditResult
+     }
+   - AuditResult: { status: 'pass'|'warn'|'fail', message, details, recommendation }
+   - Runner que executa todos os checks em paralelo
+
+2. CHECKS A IMPLEMENTAR (mínimo 25)
+   
+   PIXEL E TRACKING:
+   - Pixel está instalado?
+   - Pixel está disparando eventos nos últimos 7 dias?
+   - Conversions API configurado?
+   - Event Match Quality (EMQ) >= 6?
+   - Eventos de conversão ativos no Ads Manager?
+   - Domínio verificado no Business Manager?
+   
+   ESTRUTURA DE CAMPANHA:
+   - Campanhas usando CBO (campaign budget optimization)?
+   - Públicos sobrepostos (overlap > 30%)?
+   - Campanhas com mesmo objetivo duplicadas?
+   - Adsets com menos de 50 conversões/semana (saída de aprendizado)?
+   - Anúncios em fase de aprendizado há mais de 7 dias?
+   
+   CRIATIVOS:
+   - Criativos com fadiga não pausados?
+   - Diversidade criativa (>= 3 ativos por adset)?
+   - Anúncios rejeitados não tratados?
+   - Criativos com baixa relevância (< 5)?
+   - Vídeos sem captions/legendas?
+   
+   ORÇAMENTO E ENTREGA:
+   - Orçamento sendo gasto antes do meio-dia (entrega acelerada)?
+   - Adsets com orçamento muito baixo (<$5/dia)?
+   - Variação brusca de orçamento (>50% em 24h)?
+   
+   QUALIDADE DA CONTA:
+   - Limite de gasto da conta próximo?
+   - Forma de pagamento expira em breve?
+   - Acessos do BM atualizados?
+
+3. SCORE DE SAÚDE
+   - Score 0-100 por categoria + score global
+   - Pesos por categoria configuráveis
+   - Trend (comparar com auditorias anteriores)
+
+4. ENDPOINTS
+   - POST /clients/:id/audit/run (executa)
+   - GET /clients/:id/audit/latest
+   - GET /clients/:id/audit/history
+   - GET /audits/:id (detalhes)
+   - GET /audits/:id/pdf (relatório de auditoria exportável)
+
+5. FRONTEND
+   - /clients/[id]/audit — dashboard de auditoria
+     * Score global em destaque (gauge)
+     * Score por categoria (cards)
+     * Lista de issues por severidade (Critical, Warning, Info)
+     * Cada issue: descrição, impacto, recomendação, "marcar como tratado"
+     * Trend chart (score ao longo do tempo)
+   - Botão "Gerar PDF de auditoria" — exporta documento profissional
+     que pode ser usado como ferramenta de prospecção
+
+CRITÉRIO DE ACEITAÇÃO:
+- Auditoria roda em < 5min para client com 50 campanhas
+- Cada check tem teste unitário
+- PDF de auditoria é vendável (use como input de prospecção real)
+- Recomendações são acionáveis, não genéricas

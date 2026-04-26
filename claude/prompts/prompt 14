@@ -1,0 +1,66 @@
+Leia CLAUDE.md.
+
+Tarefa final do MVP: deixar pronto para beta com agências parceiras.
+
+1. TESTES E2E (Playwright)
+   Cobrir os fluxos críticos:
+   - Onboarding completo (registro → conectar Meta → primeiro client)
+   - Visualizar dashboard com dados reais
+   - Editar campanha (status + budget)
+   - Configurar e disparar alerta
+   - Gerar e compartilhar relatório
+   - Rodar auditoria
+   - Gerar análise de IA
+   - Login de cliente final no portal
+
+2. PERFORMANCE
+   - Lighthouse score >= 90 nas páginas principais
+   - API: p95 < 500ms para endpoints de leitura
+   - Bundle size: web < 500KB inicial
+   - Database query analysis: usar EXPLAIN em queries lentas
+   - Adicionar índices faltantes detectados
+
+3. OBSERVABILIDADE
+   - Sentry configurado em frontend e backend
+   - Logs estruturados (Pino) com níveis corretos
+   - Métricas: requests, latência, erros, fila size
+   - Healthcheck endpoints: /health (api), /ready (workers)
+   - Alerta interno: notificar admin se taxa de erro > 1%
+
+4. DOCUMENTAÇÃO
+   - README.md com setup local em < 10min
+   - DEPLOYMENT.md com passo a passo de produção
+   - ARCHITECTURE.md com decisões técnicas
+   - RUNBOOK.md com procedimentos operacionais 
+     (sync travado, token expirado, etc)
+   - API docs via Swagger em /docs
+
+5. ONBOARDING DE BETA
+   - Página /onboarding com tour guiado (use react-joyride)
+   - Vídeos curtos (gravados pelo Igor) embedados
+   - Suporte: chat com Igor (use Crisp ou similar) ou email
+
+6. AJUSTES FINAIS
+   - Revisar copys de erro (português claro, não técnico)
+   - Loading states em todos os lugares
+   - Empty states com call-to-action
+   - Acessibilidade: navegação por teclado, contraste, alt texts
+   - Mobile: dashboard funcional em telas >= 768px
+
+7. CHECKLIST DE PRODUÇÃO
+   - [ ] App Review da Meta aprovado
+   - [ ] Backups automatizados do Postgres
+   - [ ] Restore testado pelo menos 1 vez
+   - [ ] HTTPS forçado
+   - [ ] CSP, HSTS, security headers
+   - [ ] Rate limiting global ativo
+   - [ ] Logs de auditoria não excluíveis
+   - [ ] Termos de uso e política aceitos no registro
+
+CRITÉRIO DE ACEITAÇÃO:
+- 3-5 agências parceiras conseguem usar sem suporte intensivo
+- Sistema fica de pé sob carga real (10+ contas conectadas, 100+ syncs/dia)
+- Métricas de uso visíveis para Igor (quem usa, o quê, quando)
+
+🎯 MARCO FINAL: produto em beta fechado, validado, pronto para evoluir 
+para SaaS público (Fase 4+).

@@ -1,0 +1,59 @@
+Leia CLAUDE.md e revise o estado atual.
+
+Tarefa: dashboard de leitura completo e performático.
+
+1. CAMADA DE DOMÍNIO (apps/api/src/analytics/)
+   - Service MetricsService com métodos:
+     * getOverview(clientId, periodStart, periodEnd, comparePrevious)
+     * getCampaignList(clientId, period, filters, sort, pagination)
+     * getTimeSeries(clientId, period, granularity, metrics[])
+   - Cálculos derivados (CPM, CPC, CTR, CPA, ROAS, frequência) feitos AQUI
+   - NUNCA confiar 100% nos números brutos da Meta — recalcular sempre
+
+2. CACHE
+   - Redis com chave: metrics:{clientId}:{period}:{hash(filters)}
+   - TTL: 15min para período "hoje", 1h para outros
+   - Invalidação: após sync bem-sucedido
+   - Cache stampede protection (lock distribuído)
+
+3. ENDPOINTS
+   - GET /clients/:id/overview?period=7d&compare=true
+     Resposta: { current: {...kpis}, previous: {...kpis}, deltas: {...} }
+   - GET /clients/:id/campaigns?period=7d&status=ACTIVE&sort=spend:desc
+     Resposta paginada com métricas por campanha
+   - GET /clients/:id/time-series?period=7d&granularity=day&metrics=spend,clicks
+     Resposta: array de pontos para gráfico
+
+4. FRONTEND — /clients/[id]/dashboard
+   Layout:
+   - Topo: seletor de período (Hoje, Ontem, 7d, 30d, 90d, Custom com calendário)
+   - Linha de KPIs (cards): Investimento, Resultados, CPA/CPL, ROAS, CTR, CPM
+     Cada card mostra valor + variação % vs período anterior + setinha
+   - Gráfico principal: linha do tempo com toggle de métricas
+     Use Recharts. Cores acessíveis. Tooltip rico.
+   - Tabela de campanhas:
+     Colunas: Status (toggle visual mas não funcional ainda), Nome, Spend, 
+     Resultados, CPA, CTR, CPM, Frequência
+     Sortable, filtrable por status, paginada
+   - Estado de loading com skeletons (não spinners)
+   - Estado vazio amigável quando sem dados
+
+5. PERFORMANCE
+   - Server Components quando possível
+   - Streaming com Suspense
+   - Prefetch ao hover em links
+   - TanStack Query com staleTime de 5min
+   - Resposta da API < 300ms (com cache)
+
+CRITÉRIO DE ACEITAÇÃO:
+- Dashboard carrega em < 1s com cache, < 3s sem cache
+- Trocar período não congela tela
+- Gráfico responsivo em mobile
+- KPIs fazem sentido (compare com Ads Manager nativo)
+- Testes E2E com Playwright cobrindo o fluxo principal
+
+🎯 MARCO: ao final desta semana, Igor consegue olhar dados reais de cliente
+e entender performance sem abrir o Ads Manager.
+
+EM PARALELO (não é sua tarefa, é tarefa do Igor):
+- Submeter App Review da Meta com vídeos demonstrando o uso atual.

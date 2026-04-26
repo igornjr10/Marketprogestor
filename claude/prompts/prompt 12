@@ -1,0 +1,65 @@
+Leia CLAUDE.md.
+
+Tarefa: integrar Claude API para funcionalidades de inteligência.
+
+PRÉ-REQUISITO: ANTHROPIC_API_KEY no .env.
+
+1. SERVIÇO DE IA (apps/api/src/ai/)
+   - ClaudeService usando @anthropic-ai/sdk
+   - Modelo padrão: claude-sonnet-4-6 (use o exato da SKILL de produto)
+   - Wrapper com:
+     * Retry com backoff
+     * Logging de uso (tokens, custo)
+     * Cache de respostas (chave: hash do prompt)
+     * Rate limit por tenant (evitar abuso de custo)
+
+2. CASO DE USO 1 — Análise de criativos vencedores
+   - Input: top 5 criativos por ROAS dos últimos 30 dias
+     (copy + descrição visual + métricas)
+   - Output: 
+     * Padrões identificados (ângulos, ganchos, CTAs)
+     * 3 sugestões de novos criativos baseados nos padrões
+     * Justificativa de cada sugestão
+
+3. CASO DE USO 2 — Geração de copy
+   - Input: client info + objetivo + tom + briefing curto
+   - Output: 
+     * 5 variações de headline
+     * 3 variações de primary text
+     * 3 variações de description
+     * Marcação de qual estilo cada uma usa
+
+4. CASO DE USO 3 — Resumo executivo do relatório
+   - Input: dados agregados do período
+   - Output: parágrafo de 4-6 linhas em português profissional, 
+     destacando: o que funcionou, o que precisa atenção, recomendação principal
+
+5. CASO DE USO 4 — Análise de auditoria
+   - Input: resultado completo da auditoria
+   - Output: priorização inteligente das ações 
+     (não é só por severidade — leva em conta esforço × impacto)
+
+6. ENDPOINTS
+   - POST /clients/:id/ai/analyze-creatives
+   - POST /clients/:id/ai/generate-copy
+   - POST /clients/:id/ai/summarize-period
+   - POST /audits/:id/ai/prioritize
+
+7. FRONTEND
+   - Em /clients/[id]/creatives, botão "Análise IA" 
+     que abre painel lateral com insights
+   - Em /clients/[id]/copy-lab, ferramenta de geração
+     com histórico das gerações
+   - Em relatórios, resumo executivo gerado automaticamente 
+     (editável antes de enviar)
+
+8. GUARDRAILS
+   - Nunca enviar dados sensíveis de pessoas físicas (CPF, etc) à API
+   - Sanitizar prompts (sem HTML/markdown injection)
+   - Logar tokens consumidos por tenant para futura cobrança
+
+CRITÉRIO DE ACEITAÇÃO:
+- 4 casos de uso funcionando ponta a ponta
+- Custo por análise documentado (logs)
+- Cache funciona (segunda chamada idêntica é instantânea)
+- Output em português, profissional, acionável

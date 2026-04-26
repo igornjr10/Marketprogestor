@@ -1,0 +1,58 @@
+Leia CLAUDE.md.
+
+Tarefa: dois recursos paralelos.
+
+PARTE A — CENTRO DE CRIATIVOS
+
+1. SCHEMA
+   - CreativeAsset (id, tenantId, clientId nullable, name, type, fileUrl, 
+     thumbnailUrl, tags Json, copy Json, performanceData Json, 
+     uploadedBy, createdAt)
+   - CreativeAngle (id, tenantId, name, description, examples Json)
+
+2. UPLOAD E ORGANIZAÇÃO
+   - Upload de imagens e vídeos para Cloudflare R2
+   - Geração automática de thumbnail
+   - Tags personalizadas + tags de ângulo (problema, solução, social proof, 
+     urgência, etc)
+   - Filtros e busca
+
+3. PUBLICAÇÃO DIRETA NA META
+   - Wizard: selecionar criativo → selecionar adset destino → confirmar
+   - Cria Ad via Meta API
+   - Acompanha status
+
+4. BIBLIOTECA DE VENCEDORES
+   - Marcar criativos como "vencedor" (manual ou automático: ROAS > X)
+   - Visão consolidada de vencedores entre todos os clients (agência)
+   - Inspiração para novas campanhas
+
+PARTE B — MODO CLIENTE (READ-ONLY)
+
+1. SCHEMA
+   - ClientUser (id, clientId, email, passwordHash, name, 
+     viewableScopes Json, lastLoginAt, createdAt)
+   
+2. AUTH SEPARADA
+   - Endpoint /client-portal/auth/login
+   - JWT com claim diferenciado (audience: client-portal)
+   - Permissions hardcoded: leitura apenas
+
+3. PORTAL
+   - URL: /portal (ou subdomínio cliente.marketproads.app no futuro)
+   - Layout simplificado, branding da agência
+   - Páginas: Overview, Campanhas, Relatórios
+   - SEM acesso a: edição, alertas internos, auditoria, AI
+
+4. CONVITE
+   - Em /clients/[id], aba "Acessos"
+   - Adicionar email do cliente final
+   - Sistema envia email com link de primeiro acesso
+   - Cliente define senha
+
+CRITÉRIO DE ACEITAÇÃO:
+- Upload de criativo funciona
+- Publicação direta cria Ad real na Meta
+- Cliente final consegue logar e ver dashboards (sem editar)
+- Isolamento entre cliente final e gestor é total
+- Testes de segurança: cliente final não acessa endpoints de gestor
