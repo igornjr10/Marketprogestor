@@ -20,6 +20,33 @@ export type MetaConnectionSummary = {
   adAccountCount: number
 }
 
+export type SyncStatus = {
+  lastSync: string | null
+  nextScheduled: string
+  status: string
+}
+
+export type SyncLogEntry = {
+  id: string
+  jobType: 'STRUCTURE' | 'INSIGHTS_FRESH' | 'INSIGHTS_HISTORICAL' | 'CREATIVES'
+  status: string
+  startedAt: string | null
+  finishedAt: string | null
+  itemsProcessed: number
+  error: string | null
+  durationMs: number | null
+}
+
+export type SyncLogPage = {
+  logs: SyncLogEntry[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
+
 export type MetaBusiness = {
   id: string
   name: string
