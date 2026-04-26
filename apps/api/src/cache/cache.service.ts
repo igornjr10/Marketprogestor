@@ -38,6 +38,13 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     await this.redis.del(key)
   }
 
+  async invalidatePattern(pattern: string): Promise<void> {
+    const keys = await this.redis.keys(pattern)
+    if (keys.length > 0) {
+      await this.redis.del(keys)
+    }
+  }
+
   async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
     const cached = await this.get<T>(key)
     if (cached !== null) return cached

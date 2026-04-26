@@ -154,4 +154,46 @@ export class MetaApiAdapter {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
+
+  // Campaign Management Methods
+  async updateEntityStatus(entityType: 'CAMPAIGN' | 'ADSET' | 'AD', entityId: string, status: string, accessToken: string) {
+    const endpoint = `/${entityId}`
+    const response = await this.request<any>(endpoint, { status, access_token: accessToken }, 'POST')
+    return response
+  }
+
+  async updateEntityBudget(
+    entityType: 'CAMPAIGN' | 'ADSET',
+    entityId: string,
+    budgetType: 'DAILY' | 'LIFETIME',
+    value: number,
+    accessToken: string
+  ) {
+    const field = budgetType === 'DAILY' ? 'daily_budget' : 'lifetime_budget'
+    const endpoint = `/${entityId}`
+    const response = await this.request<any>(endpoint, { [field]: String(value), access_token: accessToken }, 'POST')
+    return response
+  }
+
+  async duplicateCampaign(campaignId: string, options: { name: string; dailyBudget?: number; lifetimeBudget?: number }, accessToken: string) {
+    const endpoint = `/${campaignId}/copies`
+    const data: Record<string, string> = { name: options.name, access_token: accessToken }
+    if (options.dailyBudget) data.daily_budget = String(options.dailyBudget)
+    if (options.lifetimeBudget) data.lifetime_budget = String(options.lifetimeBudget)
+
+    const response = await this.request<any>(endpoint, data, 'POST')
+    return response.campaign_id ? { id: response.campaign_id } : response
+  }
+
+  async duplicateAdSet(adSetId: string, options: { campaignId: string }, accessToken: string) {
+    const endpoint = `/${adSetId}/copies`
+    const response = await this.request<any>(endpoint, { campaign_id: options.campaignId, access_token: accessToken }, 'POST')
+    return response.adset_id ? { id: response.adset_id } : response
+  }
+
+  async duplicateAd(adId: string, options: { adSetId: string }, accessToken: string) {
+    const endpoint = `/${adId}/copies`
+    const response = await this.request<any>(endpoint, { adset_id: options.adSetId, access_token: accessToken }, 'POST')
+    return response.ad_id ? { id: response.ad_id } : response
+  }
 }
