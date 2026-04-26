@@ -78,4 +78,25 @@ export class ClientsController {
   disconnect(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.clientsService.disconnect(user.tenantId, id)
   }
+
+  @Get(':id/sync/status')
+  getSyncStatus(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.clientsService.getSyncStatus(user.tenantId, id)
+  }
+
+  @Post(':id/sync/trigger')
+  @HttpCode(HttpStatus.ACCEPTED)
+  triggerSync(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.clientsService.triggerSync(user.tenantId, id)
+  }
+
+  @Get(':id/sync/logs')
+  getSyncLogs(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+  ) {
+    return this.clientsService.getSyncLogs(user.tenantId, id, parseInt(page, 10), parseInt(limit, 10))
+  }
 }

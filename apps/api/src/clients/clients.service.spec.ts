@@ -10,6 +10,10 @@ jest.mock('@marketproads/crypto', () => ({
   decrypt: jest.fn().mockReturnValue('decrypted-token'),
 }))
 
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({ add: jest.fn().mockResolvedValue({}) })),
+}))
+
 const baseClient = {
   id: 'client-1',
   tenantId: 'tenant-1',
@@ -24,6 +28,7 @@ const mockPrismaClient = {
 
 const mockPrismaRaw = {
   metaConnection: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+  syncLog: { createMany: jest.fn() },
 }
 
 const mockPrismaService = { client: mockPrismaClient, rawClient: mockPrismaRaw }
@@ -35,6 +40,8 @@ const mockMetaAdapter = {
   getLongLivedToken: jest.fn(),
   exchangeCodeForToken: jest.fn(),
   getBusinesses: jest.fn(),
+  createSystemUser: jest.fn(),
+  getSystemUserToken: jest.fn(),
 }
 
 const mockConfigService = {
@@ -84,15 +91,29 @@ describe('ClientsService', () => {
           account_status: 1,
         },
       ])
+      mockMetaAdapter.createSystemUser.mockResolvedValue({ id: 'sys-1' })
+      mockMetaAdapter.getSystemUserToken.mockResolvedValue({
+        access_token: 'sys-token',
+        token_type: 'bearer',
+      })
       mockPrismaRaw.metaConnection.create.mockResolvedValue({ id: 'conn-1', adAccounts: [] })
 
       await service.finalizeConnection('tenant-1', 'client-1', dto)
 
       const { encrypt } = await import('@marketproads/crypto')
       expect(encrypt).toHaveBeenCalledWith('raw-access-token')
+      expect(mockMetaAdapter.createSystemUser).toHaveBeenCalledWith(
+        'raw-access-token',
+        'biz-123',
+        'MarketProgestor System User',
+      )
+      expect(mockMetaAdapter.getSystemUserToken).toHaveBeenCalledWith('raw-access-token', 'sys-1')
       expect(mockPrismaRaw.metaConnection.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ accessTokenEncrypted: 'encrypted-token' }),
+          data: expect.objectContaining({
+            accessTokenEncrypted: 'encrypted-token',
+            systemUserId: 'sys-1',
+          }),
         }),
       )
     })
@@ -114,6 +135,34 @@ describe('ClientsService', () => {
 
       await expect(service.finalizeConnection('tenant-1', 'client-1', dto)).rejects.toThrow(
         UnauthorizedException,
+      )
+    })
+  })
+
+  describe('triggerSync', () => {
+    it('adiciona jobs na fila para cada conta de anúncio', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue({
+        ...baseClient,
+        metaConnections: [
+          {
+            id: 'conn-1',
+            businessId: 'biz-1',
+            businessName: 'Empresa',
+            accessTokenEncrypted: 'encrypted-token',
+            scopes: [],
+            status: 'ACTIVE',
+            adAccounts: [{ id: 'ad-1' }, { id: 'ad-2' }],
+          },
+        ],
+      })
+      mockPrismaRaw.syncLog.createMany = jest.fn().mockResolvedValue({})
+
+      await service.triggerSync('tenant-1', 'client-1')
+
+      expect(mockPrismaRaw.syncLog.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.any(Array),
+        }),
       )
     })
   })

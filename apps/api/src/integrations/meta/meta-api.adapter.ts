@@ -87,6 +87,14 @@ export class MetaApiAdapter {
     }, 'POST')
   }
 
+  async getSystemUserToken(token: string, systemUserId: string): Promise<MetaTokenResponse> {
+    return this.request<MetaTokenResponse>(`/${systemUserId}/access_tokens`, {
+      access_token: token,
+      app_secret: this.appSecret,
+      scope: 'ads_management,ads_read,business_management,pages_read_engagement',
+    }, 'POST')
+  }
+
   async validateToken(token: string): Promise<MetaTokenInfo['data']> {
     const res = await this.request<MetaTokenInfo>('/debug_token', {
       input_token: token,

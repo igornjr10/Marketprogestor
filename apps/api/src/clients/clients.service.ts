@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Queue } from 'bullmq'
 import { encrypt, decrypt } from '@marketproads/crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { MetaApiAdapter } from '../integrations/meta/meta-api.adapter'
@@ -113,6 +114,14 @@ export class ClientsService {
     const tokenInfo = await this.meta.validateToken(dto.tokenData)
     if (!tokenInfo.is_valid) throw new UnauthorizedException('Token Meta inválido')
 
+    const systemUser = await this.meta.createSystemUser(
+      dto.tokenData,
+      dto.businessId,
+      'MarketProgestor System User',
+    )
+
+    await this.meta.getSystemUserToken(dto.tokenData, systemUser.id)
+
     const encryptedToken = encrypt(dto.tokenData)
 
     const adAccounts = await this.meta.getAdAccounts(dto.tokenData, dto.businessId)
@@ -125,6 +134,7 @@ export class ClientsService {
         clientId,
         businessId: dto.businessId,
         businessName: dto.businessName,
+        systemUserId: systemUser.id,
         accessTokenEncrypted: encryptedToken,
         scopes: tokenInfo.scopes ?? [],
         status: 'ACTIVE',
@@ -173,5 +183,109 @@ export class ClientsService {
     if (!connection) throw new NotFoundException('Nenhuma conexão Meta encontrada')
 
     await this.prisma.rawClient.metaConnection.delete({ where: { id: connection.id } })
+  }
+
+  async getSyncStatus(tenantId: string, clientId: string) {
+    const client = await this.findOne(tenantId, clientId)
+    const connection = client.metaConnections[0]
+    if (!connection) throw new NotFoundException('Nenhuma conexão Meta encontrada')
+
+    const lastSync = await this.prisma.rawClient.syncLog.findFirst({
+      where: { clientId },
+      orderBy: { finishedAt: 'desc' },
+    })
+
+    const nextScheduled = this.calculateNextSync()
+
+    return {
+      lastSync: lastSync?.finishedAt,
+      nextScheduled,
+      status: lastSync?.status ?? 'NEVER',
+    }
+  }
+
+  async triggerSync(tenantId: string, clientId: string) {
+    const client = await this.findOne(tenantId, clientId)
+    const connection = client.metaConnections[0]
+    if (!connection) throw new NotFoundException('Nenhuma conexão Meta encontrada')
+
+    // Check cooldown (5 minutes)
+    const lastTrigger = await this.prisma.rawClient.syncLog.findFirst({
+      where: { clientId, jobType: 'STRUCTURE' },
+      orderBy: { startedAt: 'desc' },
+    })
+
+    if (lastTrigger && lastTrigger.startedAt) {
+      const cooldownMs = 5 * 60 * 1000
+      const timeSinceLast = Date.now() - lastTrigger.startedAt.getTime()
+      if (timeSinceLast < cooldownMs) {
+        throw new ConflictException('Sync em cooldown, aguarde 5 minutos')
+      }
+    }
+
+    const queue = new Queue('meta-sync', {
+      connection: {
+        host: process.env['REDIS_HOST'] ?? 'localhost',
+        port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
+      },
+    })
+
+    const accountJobs = connection.adAccounts.map((account) =>
+      queue.add(
+        'sync-structure',
+        { tenantId, adAccountId: account.id },
+        {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+          priority: 1,
+        },
+      ),
+    )
+
+    await Promise.all(accountJobs)
+
+    await this.prisma.rawClient.syncLog.createMany({
+      data: connection.adAccounts.map(() => ({
+        clientId,
+        jobType: 'STRUCTURE' as const,
+        status: 'QUEUED' as const,
+        startedAt: new Date(),
+      })),
+    })
+  }
+
+  async getSyncLogs(tenantId: string, clientId: string, page = 1, limit = 20) {
+    const client = await this.findOne(tenantId, clientId)
+    const connection = client.metaConnections[0]
+    if (!connection) throw new NotFoundException('Nenhuma conexão Meta encontrada')
+
+    const [logs, total] = await Promise.all([
+      this.prisma.rawClient.syncLog.findMany({
+        where: { clientId },
+        orderBy: { startedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.rawClient.syncLog.count({ where: { clientId } }),
+    ])
+
+    return {
+      logs,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    }
+  }
+
+  private calculateNextSync(): Date {
+    const now = new Date()
+    const nextHour = new Date(now)
+    nextHour.setHours(now.getHours() + 1, 0, 0, 0)
+    return nextHour
   }
 }

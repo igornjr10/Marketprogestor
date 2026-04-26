@@ -79,6 +79,19 @@ describe('MetaApiAdapter', () => {
     })
   })
 
+  describe('getSystemUserToken', () => {
+    it('retorna um token para o system user', async () => {
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'sys-token', token_type: 'bearer' }),
+      } as Response)
+
+      const result = await adapter.getSystemUserToken('mock-token', 'sys-1')
+
+      expect(result.access_token).toBe('sys-token')
+    })
+  })
+
   describe('rate limit retry', () => {
     it('tenta novamente em erro de rate limit (código 17)', async () => {
       const rateLimitError = {
