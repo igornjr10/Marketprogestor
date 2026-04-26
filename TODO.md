@@ -12,8 +12,19 @@
 
 - [ ] **[AUTH] Access token expirado durante OAuth flow**: Se o access token (15min) expirar enquanto o usuário está no fluxo OAuth do Meta, o cookie também expira e o middleware redireciona para /login, perdendo o flow. Fix: implementar refresh automático via interceptor antes de cada chamada API.
 
+## Infraestrutura / Qualidade
+
+- [ ] **[INFRA] Queue inline em ClientsService.triggerSync**: A criação de `new Queue()` dentro do service é um anti-pattern — a conexão não é gerenciada pelo ciclo de vida do NestJS. Fix ideal: injetar a Queue via `BullModule.registerQueue` do `@nestjs/bullmq` no módulo. Contorno atual: `queue.close()` no finally evita leak imediato.
+
+- [ ] **[INFRA] MetaApiAdapter duplicado**: Existe uma cópia em `apps/api/src/integrations/meta/` e outra em `apps/workers/src/integrations/`. Mover para `packages/meta-api/` para eliminar divergência.
+
+- [ ] **[INFRA] process.env direto no worker**: `MetaSyncProcessor` lê `REDIS_HOST`/`REDIS_PORT` direto de `process.env` em vez de um ConfigService/ConfigModule validado com Zod. Adicionar `@nestjs/config` ao workers app.
+
+- [ ] **[QUALITY] Cache ausente nos endpoints de campanhas**: CLAUDE.md exige cache Redis para endpoints que retornam >100 registros. `GET /clients/:id/campaigns` e `GET /clients/:id/campaigns/insights` ainda não têm cache.
+
+- [ ] **[QUALITY] Testes para MetaSyncProcessor**: O worker de sync não tem nenhum teste unitário. Adicionar pelo menos: lock adquirido/liberado, tenantId mismatch, N+1 não ocorre (loadCampaignMap chamado 1x), DLQ triggered após max attempts.
+
 ## Funcionalidades Pendentes (Prompts futuros)
 
-- [ ] Sincronização de dados de campanhas via BullMQ workers (Prompt 04)
 - [ ] Dashboard de métricas com Recharts (Prompt 05+)
 - [ ] 2FA (twoFactorSecret já está no schema, lógica não implementada)

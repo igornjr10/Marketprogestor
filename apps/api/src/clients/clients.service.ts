@@ -98,7 +98,7 @@ export class ClientsService {
     }
 
     return {
-      tokenData: longToken.access_token,
+      tokenData: encrypt(longToken.access_token),
       businesses,
       adAccounts: adAccountsByBusiness,
     }
@@ -111,20 +111,22 @@ export class ClientsService {
       throw new ConflictException('Client já possui uma conexão Meta ativa')
     }
 
-    const tokenInfo = await this.meta.validateToken(dto.tokenData)
+    const rawToken = decrypt(dto.tokenData)
+
+    const tokenInfo = await this.meta.validateToken(rawToken)
     if (!tokenInfo.is_valid) throw new UnauthorizedException('Token Meta inválido')
 
     const systemUser = await this.meta.createSystemUser(
-      dto.tokenData,
+      rawToken,
       dto.businessId,
       'MarketProgestor System User',
     )
 
-    await this.meta.getSystemUserToken(dto.tokenData, systemUser.id)
+    await this.meta.getSystemUserToken(rawToken, systemUser.id)
 
-    const encryptedToken = encrypt(dto.tokenData)
+    const encryptedToken = encrypt(rawToken)
 
-    const adAccounts = await this.meta.getAdAccounts(dto.tokenData, dto.businessId)
+    const adAccounts = await this.meta.getAdAccounts(rawToken, dto.businessId)
     const selectedAccounts = adAccounts.filter((a) =>
       dto.adAccountIds.includes(a.account_id),
     )
@@ -223,37 +225,39 @@ export class ClientsService {
       }
     }
 
+    const redisUrl = new URL(this.config.get('REDIS_URL') ?? 'redis://localhost:6379')
     const queue = new Queue('meta-sync', {
-      connection: {
-        host: process.env['REDIS_HOST'] ?? 'localhost',
-        port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
-      },
+      connection: { host: redisUrl.hostname, port: parseInt(redisUrl.port || '6379', 10) },
     })
 
-    const accountJobs = connection.adAccounts.map((account) =>
-      queue.add(
-        'sync-structure',
-        { tenantId, adAccountId: account.id },
-        {
-          attempts: 5,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: true,
-          removeOnFail: false,
-          priority: 1,
-        },
-      ),
-    )
+    try {
+      const accountJobs = connection.adAccounts.map((account) =>
+        queue.add(
+          'sync-structure',
+          { tenantId, adAccountId: account.id },
+          {
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 2000 },
+            removeOnComplete: true,
+            removeOnFail: false,
+            priority: 1,
+          },
+        ),
+      )
 
-    await Promise.all(accountJobs)
+      await Promise.all(accountJobs)
 
-    await this.prisma.rawClient.syncLog.createMany({
-      data: connection.adAccounts.map(() => ({
-        clientId,
-        jobType: 'STRUCTURE' as const,
-        status: 'QUEUED' as const,
-        startedAt: new Date(),
-      })),
-    })
+      await this.prisma.rawClient.syncLog.createMany({
+        data: connection.adAccounts.map(() => ({
+          clientId,
+          jobType: 'STRUCTURE' as const,
+          status: 'PENDING' as const,
+          startedAt: new Date(),
+        })),
+      })
+    } finally {
+      await queue.close()
+    }
   }
 
   async getSyncLogs(tenantId: string, clientId: string, page = 1, limit = 20) {

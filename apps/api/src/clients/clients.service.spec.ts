@@ -11,7 +11,10 @@ jest.mock('@marketproads/crypto', () => ({
 }))
 
 jest.mock('bullmq', () => ({
-  Queue: jest.fn().mockImplementation(() => ({ add: jest.fn().mockResolvedValue({}) })),
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn().mockResolvedValue({}),
+    close: jest.fn().mockResolvedValue(undefined),
+  })),
 }))
 
 const baseClient = {
@@ -28,7 +31,7 @@ const mockPrismaClient = {
 
 const mockPrismaRaw = {
   metaConnection: { create: jest.fn(), update: jest.fn(), delete: jest.fn() },
-  syncLog: { createMany: jest.fn() },
+  syncLog: { createMany: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
 }
 
 const mockPrismaService = { client: mockPrismaClient, rawClient: mockPrismaRaw }
@@ -45,7 +48,13 @@ const mockMetaAdapter = {
 }
 
 const mockConfigService = {
-  get: jest.fn().mockReturnValue('http://localhost:3000/meta/callback'),
+  get: jest.fn((key: string) => {
+    const vals: Record<string, string> = {
+      META_REDIRECT_URI: 'http://localhost:3000/meta/callback',
+      REDIS_URL: 'redis://localhost:6379',
+    }
+    return vals[key] ?? ''
+  }),
 }
 
 describe('ClientsService', () => {
@@ -63,7 +72,6 @@ describe('ClientsService', () => {
 
     service = module.get(ClientsService)
     jest.clearAllMocks()
-    mockConfigService.get.mockReturnValue('http://localhost:3000/meta/callback')
   })
 
   describe('finalizeConnection', () => {
@@ -100,14 +108,15 @@ describe('ClientsService', () => {
 
       await service.finalizeConnection('tenant-1', 'client-1', dto)
 
+      // dto.tokenData decrypts to 'decrypted-token' (mock), which is used as rawToken throughout
       const { encrypt } = await import('@marketproads/crypto')
-      expect(encrypt).toHaveBeenCalledWith('raw-access-token')
+      expect(encrypt).toHaveBeenCalledWith('decrypted-token')
       expect(mockMetaAdapter.createSystemUser).toHaveBeenCalledWith(
-        'raw-access-token',
+        'decrypted-token',
         'biz-123',
         'MarketProgestor System User',
       )
-      expect(mockMetaAdapter.getSystemUserToken).toHaveBeenCalledWith('raw-access-token', 'sys-1')
+      expect(mockMetaAdapter.getSystemUserToken).toHaveBeenCalledWith('decrypted-token', 'sys-1')
       expect(mockPrismaRaw.metaConnection.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -140,30 +149,91 @@ describe('ClientsService', () => {
   })
 
   describe('triggerSync', () => {
+    const clientWithConn = {
+      ...baseClient,
+      metaConnections: [
+        {
+          id: 'conn-1',
+          businessId: 'biz-1',
+          businessName: 'Empresa',
+          accessTokenEncrypted: 'encrypted-token',
+          scopes: [],
+          status: 'ACTIVE',
+          adAccounts: [{ id: 'ad-1' }, { id: 'ad-2' }],
+        },
+      ],
+    }
+
     it('adiciona jobs na fila para cada conta de anúncio', async () => {
-      mockPrismaClient.client.findFirst.mockResolvedValue({
-        ...baseClient,
-        metaConnections: [
-          {
-            id: 'conn-1',
-            businessId: 'biz-1',
-            businessName: 'Empresa',
-            accessTokenEncrypted: 'encrypted-token',
-            scopes: [],
-            status: 'ACTIVE',
-            adAccounts: [{ id: 'ad-1' }, { id: 'ad-2' }],
-          },
-        ],
-      })
-      mockPrismaRaw.syncLog.createMany = jest.fn().mockResolvedValue({})
+      mockPrismaClient.client.findFirst.mockResolvedValue(clientWithConn)
+      mockPrismaRaw.syncLog.findFirst.mockResolvedValue(null)
+      mockPrismaRaw.syncLog.createMany.mockResolvedValue({})
 
       await service.triggerSync('tenant-1', 'client-1')
 
       expect(mockPrismaRaw.syncLog.createMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.any(Array),
-        }),
+        expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ jobType: 'STRUCTURE', status: 'PENDING' })]) }),
       )
+    })
+
+    it('lança ConflictException se sync recente existe (cooldown)', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(clientWithConn)
+      mockPrismaRaw.syncLog.findFirst.mockResolvedValue({
+        id: 'log-1',
+        startedAt: new Date(), // agora — dentro do cooldown
+      })
+
+      await expect(service.triggerSync('tenant-1', 'client-1')).rejects.toThrow(ConflictException)
+    })
+
+    it('permite sync se cooldown expirou (>5 min atrás)', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(clientWithConn)
+      const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000)
+      mockPrismaRaw.syncLog.findFirst.mockResolvedValue({ id: 'log-1', startedAt: sixMinutesAgo })
+      mockPrismaRaw.syncLog.createMany.mockResolvedValue({})
+
+      await expect(service.triggerSync('tenant-1', 'client-1')).resolves.not.toThrow()
+    })
+
+    it('lança NotFoundException se não há conexão Meta', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(baseClient)
+
+      await expect(service.triggerSync('tenant-1', 'client-1')).rejects.toThrow(NotFoundException)
+    })
+  })
+
+  describe('getSyncLogs', () => {
+    const clientWithConn = {
+      ...baseClient,
+      metaConnections: [{ id: 'conn-1', status: 'ACTIVE', adAccounts: [] }],
+    }
+
+    it('retorna logs paginados com metadados corretos', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(clientWithConn)
+      const fakeLogs = [{ id: 'log-1', jobType: 'STRUCTURE', status: 'COMPLETED' }]
+      mockPrismaRaw.syncLog.findMany.mockResolvedValue(fakeLogs)
+      mockPrismaRaw.syncLog.count.mockResolvedValue(1)
+
+      const result = await service.getSyncLogs('tenant-1', 'client-1', 1, 20)
+
+      expect(result.logs).toEqual(fakeLogs)
+      expect(result.pagination).toMatchObject({ page: 1, limit: 20, total: 1, pages: 1 })
+    })
+
+    it('calcula corretamente o total de páginas', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(clientWithConn)
+      mockPrismaRaw.syncLog.findMany.mockResolvedValue([])
+      mockPrismaRaw.syncLog.count.mockResolvedValue(45)
+
+      const result = await service.getSyncLogs('tenant-1', 'client-1', 1, 20)
+
+      expect(result.pagination.pages).toBe(3)
+    })
+
+    it('lança NotFoundException se não há conexão Meta', async () => {
+      mockPrismaClient.client.findFirst.mockResolvedValue(baseClient)
+
+      await expect(service.getSyncLogs('tenant-1', 'client-1')).rejects.toThrow(NotFoundException)
     })
   })
 

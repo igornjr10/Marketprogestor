@@ -1,3 +1,7 @@
+import * as path from 'path'
+import * as dotenv from 'dotenv'
+dotenv.config({ path: path.join(__dirname, '..', '.env'), override: true })
+
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 import { AppModule } from './app.module'

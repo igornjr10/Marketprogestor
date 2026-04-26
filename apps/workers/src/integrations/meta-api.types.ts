@@ -63,14 +63,6 @@ export type MetaInsightRow = {
   ad_id?: string
 }
 
-export type MetaCreativeRow = {
-  id: string
-  creative_id: string
-  name: string
-  status: string
-  creative?: Record<string, unknown>
-}
-
 export type MetaPaginatedResponse<T> = {
   data: T[]
   paging?: {
