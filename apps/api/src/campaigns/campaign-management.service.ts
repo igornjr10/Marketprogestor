@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ConflictException } from '@nestjs/common'
+import { Injectable, BadRequestException, ConflictException, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { MetaApiAdapter } from '../integrations/meta/meta-api.adapter'
 import { CacheService } from '../cache/cache.service'
@@ -34,6 +34,8 @@ export type DuplicateCampaignInput = {
 
 @Injectable()
 export class CampaignManagementService {
+  private readonly logger = new Logger(CampaignManagementService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly meta: MetaApiAdapter,
@@ -42,24 +44,24 @@ export class CampaignManagementService {
 
   async toggleStatus(input: ToggleStatusInput) {
     const { entityType, entityId, newStatus, userId } = input
+    this.logger.log({ action: 'toggleStatus.start', entityType, entityId, newStatus, userId })
 
-    // Get current entity and access token
     const { entity, accessToken } = await this.getEntityWithToken(entityType, entityId)
     if (!entity) throw new BadRequestException('Entidade não encontrada')
 
-    // Validate status transition
     this.validateStatusTransition(entity.status, newStatus)
 
-    // Get Meta API ID
     const metaId = this.getMetaId(entityType, entity)
 
-    // Call Meta API
-    await this.meta.updateEntityStatus(entityType, metaId, newStatus, accessToken)
+    try {
+      await this.meta.updateEntityStatus(entityType, metaId, newStatus, accessToken)
+    } catch (err) {
+      this.logger.error({ action: 'toggleStatus.metaApi.failed', entityType, entityId, newStatus, err })
+      throw err
+    }
 
-    // Update local database
     const updatedEntity = await this.updateEntityStatus(entityType, entityId, newStatus)
 
-    // Create audit log
     await this.createAuditLog({
       userId,
       action: 'STATUS_CHANGE',
@@ -69,41 +71,42 @@ export class CampaignManagementService {
       after: { status: newStatus },
     })
 
-    // Invalidate cache
     await this.invalidateEntityCache(entityType, entityId)
 
+    this.logger.log({ action: 'toggleStatus.success', entityType, entityId, prevStatus: entity.status, newStatus, userId })
     return updatedEntity
   }
 
   async updateBudget(input: UpdateBudgetInput) {
     const { entityType, entityId, budgetType, value, userId } = input
+    this.logger.log({ action: 'updateBudget.start', entityType, entityId, budgetType, value, userId })
 
     if (value <= 0) throw new BadRequestException('Orçamento deve ser maior que zero')
 
-    // Get current entity and access token
     const { entity, accessToken } = await this.getEntityWithToken(entityType, entityId)
     if (!entity) throw new BadRequestException('Entidade não encontrada')
 
-    // Check for significant budget changes (>50%)
     const currentBudget = this.getCurrentBudget(entity, budgetType)
     if (currentBudget && this.isSignificantChange(currentBudget, value)) {
+      this.logger.warn({ action: 'updateBudget.significantChange.blocked', entityType, entityId, budgetType, currentBudget, newValue: value, userId })
       throw new ConflictException('Mudança de orçamento >50% requer confirmação extra')
     }
 
-    // Get Meta API ID
     const metaId = this.getMetaId(entityType, entity)
 
-    // Call Meta API
     if (entityType !== 'AD') {
-      await this.meta.updateEntityBudget(entityType, metaId, budgetType, value, accessToken)
+      try {
+        await this.meta.updateEntityBudget(entityType, metaId, budgetType, value, accessToken)
+      } catch (err) {
+        this.logger.error({ action: 'updateBudget.metaApi.failed', entityType, entityId, budgetType, value, err })
+        throw err
+      }
     } else {
       throw new BadRequestException('Anúncios não suportam atualização de orçamento')
     }
 
-    // Update local database
     const updatedEntity = await this.updateEntityBudget(entityType, entityId, budgetType, value)
 
-    // Create audit log
     await this.createAuditLog({
       userId,
       action: 'BUDGET_UPDATE',
@@ -113,21 +116,26 @@ export class CampaignManagementService {
       after: { [budgetType.toLowerCase() + 'Budget']: value },
     })
 
-    // Invalidate cache
     await this.invalidateEntityCache(entityType, entityId)
 
+    this.logger.log({ action: 'updateBudget.success', entityType, entityId, budgetType, prevValue: currentBudget, newValue: value, userId })
     return updatedEntity
   }
 
   async duplicateCampaign(input: DuplicateCampaignInput) {
     const { campaignId, options, userId } = input
+    this.logger.log({ action: 'duplicateCampaign.start', campaignId, name: options.name, includeCreatives: options.includeCreatives, userId })
 
-    // Get original campaign and access token
     const { entity: campaign, accessToken } = await this.getEntityWithToken('CAMPAIGN', campaignId)
     if (!campaign) throw new BadRequestException('Campanha não encontrada')
 
-    // Call Meta API to duplicate
-    const duplicatedMetaCampaign = await this.meta.duplicateCampaign(campaign.metaCampaignId, options, accessToken)
+    let duplicatedMetaCampaign: { id: string }
+    try {
+      duplicatedMetaCampaign = await this.meta.duplicateCampaign(campaign.metaCampaignId, options, accessToken)
+    } catch (err) {
+      this.logger.error({ action: 'duplicateCampaign.metaApi.failed', campaignId, err })
+      throw err
+    }
 
     // Create new campaign in database
     const newCampaign = await this.prisma.client.campaign.create({
@@ -195,7 +203,6 @@ export class CampaignManagementService {
       }
     }
 
-    // Create audit log
     await this.createAuditLog({
       userId,
       action: 'CAMPAIGN_DUPLICATED',
@@ -205,6 +212,7 @@ export class CampaignManagementService {
       after: { originalCampaignId: campaignId, options },
     })
 
+    this.logger.log({ action: 'duplicateCampaign.success', originalCampaignId: campaignId, newCampaignId: newCampaign.id, name: options.name, userId })
     return newCampaign
   }
 

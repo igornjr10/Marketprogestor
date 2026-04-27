@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, AlertTriangle, RotateCcw } from 'lucide-react'
 import { ConfirmDialog } from './confirm-dialog'
 import { updateCampaignStatus, updateAdSetStatus } from '@/lib/campaigns'
 
@@ -20,9 +20,9 @@ type Props = {
 
 export function StatusToggle({ entityType, entityId, clientId, currentStatus, token, onSuccess }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
-  const isPausing = currentStatus === 'ACTIVE'
   const isActive = currentStatus === 'ACTIVE'
   const isPaused = currentStatus === 'PAUSED'
 
@@ -34,31 +34,53 @@ export function StatusToggle({ entityType, entityId, clientId, currentStatus, to
       }
       return updateAdSetStatus(clientId, entityId, status, token, key)
     },
-    onSuccess: () => {
-      toast.success(isPausing ? 'Campanha pausada' : 'Campanha ativada')
+    onSuccess: (_data, status) => {
+      toast.success(status === 'PAUSED' ? 'Campanha pausada' : 'Campanha ativada')
       queryClient.invalidateQueries({ queryKey: ['campaigns', clientId] })
       queryClient.invalidateQueries({ queryKey: ['campaign', entityId] })
+      setPendingStatus(null)
       onSuccess?.()
     },
     onError: (err: Error) => {
-      toast.error('Erro ao atualizar status', { description: err.message })
+      toast.error('Falha na sincronização com Meta Ads', { description: err.message })
     },
   })
 
   if (!isActive && !isPaused) return null
 
-  const handleClick = () => {
-    if (isPausing) {
+  const handleClick = (targetStatus: string) => {
+    setPendingStatus(targetStatus)
+    if (targetStatus === 'PAUSED') {
       setConfirmOpen(true)
     } else {
       mutation.mutate('ACTIVE')
     }
   }
 
+  // Desync flag: mutation failed — last attempted change didn't go through
+  if (mutation.isError) {
+    return (
+      <div className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:bg-red-900/20 dark:text-red-400">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        <span>Dessincronizado</span>
+        <button
+          onClick={() => {
+            mutation.reset()
+            if (pendingStatus) mutation.mutate(pendingStatus)
+          }}
+          title="Tentar novamente"
+          className="ml-1 rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/40"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <>
       <button
-        onClick={handleClick}
+        onClick={() => handleClick(isActive ? 'PAUSED' : 'ACTIVE')}
         disabled={mutation.isPending}
         className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
           isActive
@@ -66,9 +88,7 @@ export function StatusToggle({ entityType, entityId, clientId, currentStatus, to
             : 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400'
         }`}
       >
-        {mutation.isPending ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : null}
+        {mutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
         {isActive ? 'Pausar' : 'Ativar'}
       </button>
 
@@ -83,7 +103,10 @@ export function StatusToggle({ entityType, entityId, clientId, currentStatus, to
           setConfirmOpen(false)
           mutation.mutate('PAUSED')
         }}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => {
+          setConfirmOpen(false)
+          setPendingStatus(null)
+        }}
       />
     </>
   )
