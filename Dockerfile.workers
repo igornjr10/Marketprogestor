@@ -1,0 +1,29 @@
+FROM node:20-alpine
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /repo
+
+# Copy workspace manifests first
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY apps/api/package.json     ./apps/api/package.json
+COPY apps/workers/package.json ./apps/workers/package.json
+COPY apps/web/package.json     ./apps/web/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY packages/types/package.json    ./packages/types/package.json
+COPY packages/crypto/package.json   ./packages/crypto/package.json
+COPY packages/config/package.json   ./packages/config/package.json
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy only the sources needed for workers
+COPY packages/ ./packages/
+COPY apps/workers/ ./apps/workers/
+
+# Generate Prisma client then compile
+RUN pnpm --filter @marketproads/database db:generate
+RUN pnpm --filter @marketproads/workers build
+
+CMD ["node", "apps/workers/dist/apps/workers/src/main"]

@@ -1,8 +1,7 @@
 [build]
-builder = "nixpacks"
-buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @marketproads/database prisma generate && pnpm --filter @marketproads/workers build"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.workers"
 
 [deploy]
-startCommand = "pnpm --filter @marketproads/workers start"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

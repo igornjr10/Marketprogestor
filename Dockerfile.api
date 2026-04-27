@@ -1,0 +1,32 @@
+FROM node:20-alpine
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /repo
+
+# Copy workspace manifests first (all needed so pnpm can resolve the workspace graph)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY apps/api/package.json     ./apps/api/package.json
+COPY apps/workers/package.json ./apps/workers/package.json
+COPY apps/web/package.json     ./apps/web/package.json
+COPY packages/database/package.json ./packages/database/package.json
+COPY packages/types/package.json    ./packages/types/package.json
+COPY packages/crypto/package.json   ./packages/crypto/package.json
+COPY packages/config/package.json   ./packages/config/package.json
+
+# Install all workspace dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy only the sources needed for the API
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+
+# Generate Prisma client then compile
+RUN pnpm --filter @marketproads/database db:generate
+RUN pnpm --filter @marketproads/api build
+
+EXPOSE 3001
+
+# Run pending migrations at container start, then launch the server
+CMD ["sh", "-c", "pnpm --filter @marketproads/database db:migrate:deploy && node apps/api/dist/apps/api/src/main"]
