@@ -23,8 +23,9 @@ RUN pnpm install --frozen-lockfile
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-# Generate Prisma client then compile
+# Generate Prisma client, compile database package, then compile API
 RUN pnpm --filter @marketproads/database db:generate
+RUN pnpm --filter @marketproads/database build
 RUN pnpm --filter @marketproads/api build
 
 EXPOSE 3001
