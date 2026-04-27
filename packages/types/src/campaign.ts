@@ -125,3 +125,33 @@ export type CampaignMetricsPage = {
     pages: number
   }
 }
+
+export type AuditLogEntry = {
+  id: string
+  action: string
+  entityType: string
+  entityId: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  createdAt: string
+  user: { id: string; name: string; email: string }
+}
+
+export type DryRunImpact = {
+  type: string
+  message: string
+  requiresConfirmation: boolean
+}
+
+export type DryRunResult = {
+  current: Record<string, unknown>
+  proposed: Record<string, unknown>
+  impacts: DryRunImpact[]
+}
+
+export type DuplicateOptions = {
+  name: string
+  dailyBudget?: number
+  lifetimeBudget?: number
+  includeCreatives: boolean
+}

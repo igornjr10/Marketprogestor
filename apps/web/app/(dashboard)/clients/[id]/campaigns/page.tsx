@@ -4,9 +4,12 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowLeft, BarChart2, RefreshCw, TrendingUp } from 'lucide-react'
+import { ArrowLeft, BarChart2, TrendingUp, Pencil, Copy } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { getCampaigns, getClientInsights } from '@/lib/campaigns'
+import { StatusToggle } from '@/components/campaigns/status-toggle'
+import { BudgetModal } from '@/components/campaigns/budget-modal'
+import { DuplicateModal } from '@/components/campaigns/duplicate-modal'
 import type { Campaign } from '@marketproads/types'
 import {
   AreaChart,
@@ -212,21 +215,23 @@ export default function CampaignsPage() {
 }
 
 function CampaignRow({ campaign, clientId }: { campaign: Campaign; clientId: string }) {
+  const accessToken = useAuthStore((s) => s.accessToken) ?? ''
+  const [budgetOpen, setBudgetOpen] = useState(false)
+  const [dupOpen, setDupOpen] = useState(false)
+
   const budget = campaign.dailyBudget ?? campaign.lifetimeBudget
   const budgetLabel = campaign.dailyBudget ? 'diário' : campaign.lifetimeBudget ? 'total' : null
 
   return (
-    <Link
-      href={`/clients/${clientId}/campaigns/${campaign.id}`}
-      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors"
-    >
-      <div className="min-w-0 flex-1">
+    <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors">
+      <Link href={`/clients/${clientId}/campaigns/${campaign.id}`} className="min-w-0 flex-1">
         <p className="truncate font-medium text-sm">{campaign.name}</p>
         <p className="text-xs text-muted-foreground mt-0.5">{campaign.objective}</p>
-      </div>
-      <div className="ml-4 flex items-center gap-4 text-sm shrink-0">
+      </Link>
+
+      <div className="ml-4 flex items-center gap-3 text-sm shrink-0">
         {budget && (
-          <span className="text-muted-foreground text-xs">
+          <span className="text-muted-foreground text-xs hidden sm:inline">
             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(budget / 100)}{' '}
             {budgetLabel}
           </span>
@@ -236,9 +241,49 @@ function CampaignRow({ campaign, clientId }: { campaign: Campaign; clientId: str
         >
           {campaign.status}
         </span>
-        <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+
+        <StatusToggle
+          entityType="CAMPAIGN"
+          entityId={campaign.id}
+          clientId={clientId}
+          currentStatus={campaign.status}
+          token={accessToken}
+        />
+
+        <button
+          onClick={() => setBudgetOpen(true)}
+          title="Editar orçamento"
+          className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          onClick={() => setDupOpen(true)}
+          title="Duplicar campanha"
+          className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
       </div>
-    </Link>
+
+      <BudgetModal
+        entity={campaign}
+        clientId={clientId}
+        campaignId={campaign.id}
+        token={accessToken}
+        open={budgetOpen}
+        onClose={() => setBudgetOpen(false)}
+      />
+      <DuplicateModal
+        clientId={clientId}
+        campaignId={campaign.id}
+        campaignName={campaign.name}
+        token={accessToken}
+        open={dupOpen}
+        onClose={() => setDupOpen(false)}
+      />
+    </div>
   )
 }
 

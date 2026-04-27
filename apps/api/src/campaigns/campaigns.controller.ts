@@ -1,7 +1,9 @@
-import { Controller, Get, Patch, Post, Param, Body, Query, UseGuards, Header, NotFoundException, Req } from '@nestjs/common'
+import { Controller, Get, Patch, Post, Param, Body, Query, UseGuards, UseInterceptors, Header, NotFoundException, Req } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { CampaignsService } from './campaigns.service'
 import { CampaignManagementService } from './campaign-management.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor'
 import { JwtGuard } from '../auth/guards/jwt.guard'
 import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import type { JwtPayload } from '@marketproads/types'
@@ -49,6 +51,8 @@ export class CampaignsController {
   }
 
   // Management endpoints
+  @Throttle({ mutations: { limit: 30, ttl: 60000 } })
+  @UseInterceptors(IdempotencyInterceptor)
   @Patch(':campaignId')
   async updateCampaign(
     @CurrentUser() user: JwtPayload,
@@ -100,6 +104,7 @@ export class CampaignsController {
     return Promise.all(updates)
   }
 
+  @Throttle({ mutations: { limit: 30, ttl: 60000 } })
   @Post(':campaignId/dry-run')
   async dryRunCampaign(
     @CurrentUser() user: JwtPayload,
@@ -113,6 +118,8 @@ export class CampaignsController {
     return this.managementService.dryRun('CAMPAIGN', campaignId, changes)
   }
 
+  @Throttle({ mutations: { limit: 30, ttl: 60000 } })
+  @UseInterceptors(IdempotencyInterceptor)
   @Post(':campaignId/duplicate')
   async duplicateCampaign(
     @CurrentUser() user: JwtPayload,
@@ -131,6 +138,8 @@ export class CampaignsController {
   }
 
   // AdSet management
+  @Throttle({ mutations: { limit: 30, ttl: 60000 } })
+  @UseInterceptors(IdempotencyInterceptor)
   @Patch('adsets/:adSetId')
   async updateAdSet(
     @CurrentUser() user: JwtPayload,
@@ -189,6 +198,8 @@ export class CampaignsController {
   }
 
   // Ad management
+  @Throttle({ mutations: { limit: 30, ttl: 60000 } })
+  @UseInterceptors(IdempotencyInterceptor)
   @Patch('ads/:adId')
   async updateAd(
     @CurrentUser() user: JwtPayload,

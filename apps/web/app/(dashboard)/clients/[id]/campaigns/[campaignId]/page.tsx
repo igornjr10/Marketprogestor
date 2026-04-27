@@ -4,9 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Pencil, Copy, History } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { getCampaign } from '@/lib/campaigns'
+import { StatusToggle } from '@/components/campaigns/status-toggle'
+import { BudgetModal } from '@/components/campaigns/budget-modal'
+import { DuplicateModal } from '@/components/campaigns/duplicate-modal'
+import { AuditLogPanel } from '@/components/campaigns/audit-log-panel'
 import type { AdSet, Ad } from '@marketproads/types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -27,11 +31,13 @@ function formatBudget(value: number | null) {
 
 export default function CampaignDetailPage() {
   const { id: clientId, campaignId } = useParams<{ id: string; campaignId: string }>()
-  const accessToken = useAuthStore((s) => s.accessToken)
+  const accessToken = useAuthStore((s) => s.accessToken) ?? ''
+  const [budgetOpen, setBudgetOpen] = useState(false)
+  const [dupOpen, setDupOpen] = useState(false)
 
   const { data: campaign, isLoading } = useQuery({
     queryKey: ['campaign', clientId, campaignId],
-    queryFn: () => getCampaign(clientId, campaignId, accessToken ?? ''),
+    queryFn: () => getCampaign(clientId, campaignId, accessToken),
     enabled: !!accessToken,
   })
 
@@ -44,14 +50,37 @@ export default function CampaignDetailPage() {
         <Link href={`/clients/${clientId}/campaigns`} className="rounded-md p-1 hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-bold tracking-tight truncate">{campaign.name}</h2>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[campaign.status] ?? 'bg-gray-100 text-gray-600'}`}>
               {campaign.status}
             </span>
           </div>
           <p className="text-sm text-muted-foreground">{campaign.objective}</p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusToggle
+            entityType="CAMPAIGN"
+            entityId={campaign.id}
+            clientId={clientId}
+            currentStatus={campaign.status}
+            token={accessToken}
+          />
+          <button
+            onClick={() => setBudgetOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
+          >
+            <Pencil className="h-3 w-3" /> Orçamento
+          </button>
+          <button
+            onClick={() => setDupOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
+          >
+            <Copy className="h-3 w-3" /> Duplicar
+          </button>
         </div>
       </div>
 
@@ -108,41 +137,91 @@ export default function CampaignDetailPage() {
         ) : (
           <div className="divide-y">
             {campaign.adSets.map((adSet) => (
-              <AdSetRow key={adSet.id} adSet={adSet} />
+              <AdSetRow key={adSet.id} adSet={adSet} clientId={clientId} campaignId={campaignId} token={accessToken} />
             ))}
           </div>
         )}
       </div>
+
+      {/* Audit Log */}
+      <div className="rounded-lg border bg-card p-6">
+        <h3 className="font-semibold flex items-center gap-2 mb-4">
+          <History className="h-4 w-4" /> Histórico de alterações
+        </h3>
+        <AuditLogPanel
+          clientId={clientId}
+          token={accessToken}
+          entityId={campaign.id}
+          entityType="CAMPAIGN"
+        />
+      </div>
+
+      <BudgetModal
+        entity={campaign}
+        clientId={clientId}
+        campaignId={campaign.id}
+        token={accessToken}
+        open={budgetOpen}
+        onClose={() => setBudgetOpen(false)}
+      />
+      <DuplicateModal
+        clientId={clientId}
+        campaignId={campaign.id}
+        campaignName={campaign.name}
+        token={accessToken}
+        open={dupOpen}
+        onClose={() => setDupOpen(false)}
+      />
     </div>
   )
 }
 
-function AdSetRow({ adSet }: { adSet: AdSet & { ads: Ad[] } }) {
+function AdSetRow({ adSet, clientId, campaignId, token }: { adSet: AdSet & { ads: Ad[] }; clientId: string; campaignId: string; token: string }) {
   const [expanded, setExpanded] = useState(false)
+  const [budgetOpen, setBudgetOpen] = useState(false)
 
   return (
     <div>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-sm truncate">{adSet.name}</p>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[adSet.status] ?? 'bg-gray-100 text-gray-600'}`}>
-              {adSet.status}
-            </span>
+      <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {expanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-sm truncate">{adSet.name}</p>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[adSet.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                {adSet.status}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {adSet.optimizationGoal} · {adSet.ads.length} anúncio(s)
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {adSet.optimizationGoal} · {adSet.ads.length} anúncio(s)
-          </p>
+        </button>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusToggle
+            entityType="ADSET"
+            entityId={adSet.id}
+            clientId={clientId}
+            currentStatus={adSet.status}
+            token={token}
+          />
+          <button
+            onClick={() => setBudgetOpen(true)}
+            title="Editar orçamento"
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
         </div>
-        {expanded ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        )}
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t bg-muted/20 px-4 py-3 space-y-2">
@@ -183,6 +262,16 @@ function AdSetRow({ adSet }: { adSet: AdSet & { ads: Ad[] } }) {
           )}
         </div>
       )}
+
+      <BudgetModal
+        entity={{ id: adSet.id, name: adSet.name, dailyBudget: adSet.dailyBudget, lifetimeBudget: adSet.lifetimeBudget }}
+        clientId={clientId}
+        campaignId={campaignId}
+        adSetId={adSet.id}
+        token={token}
+        open={budgetOpen}
+        onClose={() => setBudgetOpen(false)}
+      />
     </div>
   )
 }

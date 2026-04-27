@@ -1,3 +1,4 @@
+import { Toaster } from 'sonner'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 
@@ -9,6 +10,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Header />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <Toaster position="bottom-right" richColors />
     </div>
   )
 }
