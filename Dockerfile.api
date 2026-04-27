@@ -29,5 +29,4 @@ RUN pnpm --filter @marketproads/api build
 
 EXPOSE 3001
 
-# Run pending migrations at container start, then launch the server
-CMD ["sh", "-c", "pnpm --filter @marketproads/database db:migrate:deploy && node apps/api/dist/apps/api/src/main"]
+CMD ["node", "apps/api/dist/apps/api/src/main"]
