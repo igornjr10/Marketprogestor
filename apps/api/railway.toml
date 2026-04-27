@@ -1,0 +1,13 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @marketproads/database prisma generate && pnpm --filter @marketproads/api build"
+
+[deploy]
+startCommand = "pnpm --filter @marketproads/database prisma migrate deploy && pnpm --filter @marketproads/api start"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[healthcheck]
+path = "/api/health"
+intervalSeconds = 30
+timeoutSeconds = 10
