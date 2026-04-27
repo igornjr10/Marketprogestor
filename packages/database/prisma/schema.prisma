@@ -52,6 +52,11 @@ enum SyncStatus {
   FAILED
 }
 
+enum AlertEventStatus {
+  OPEN
+  RESOLVED
+}
+
 // ============================================================
 // TENANT
 // ============================================================
@@ -66,6 +71,7 @@ model Tenant {
   users     User[]
   auditLogs AuditLog[]
   clients   Client[]
+  alerts    Alert[]
 
   @@map("tenants")
 }
@@ -160,6 +166,7 @@ model Client {
   metaConnections MetaConnection[]
   adAccounts      MetaAdAccount[]
   syncLogs        SyncLog[]
+  alerts          Alert[]
 
   @@index([tenantId])
   @@map("clients")
@@ -343,4 +350,52 @@ model SyncLog {
   @@index([jobType])
   @@index([status])
   @@map("sync_logs")
+}
+
+// ============================================================
+// ALERTS
+// ============================================================
+
+model Alert {
+  id              String   @id @default(cuid())
+  tenantId        String
+  clientId        String?
+  name            String
+  description     String?
+  ruleJson        Json
+  channels        Json
+  cooldownMinutes Int      @default(60)
+  isActive        Boolean  @default(true)
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client      Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  alertEvents AlertEvent[]
+
+  @@index([tenantId])
+  @@index([clientId])
+  @@index([isActive])
+  @@map("alerts")
+}
+
+model AlertEvent {
+  id           String           @id @default(cuid())
+  alertId      String
+  triggeredAt  DateTime         @default(now())
+  entityType   String
+  entityId     String
+  entityName   String
+  metricValue  Float
+  ruleSnapshot Json
+  status       AlertEventStatus @default(OPEN)
+  resolvedAt   DateTime?
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+  @@index([status])
+  @@index([triggeredAt])
+  @@map("alert_events")
 }

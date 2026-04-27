@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Megaphone, BarChart2, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, Megaphone, BarChart2, Settings, Bell } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
+  { href: '/alerts', label: 'Alertas', icon: Bell },
   { href: '/reports', label: 'Relatórios', icon: BarChart2 },
   { href: '/settings', label: 'Configurações', icon: Settings },
 ]

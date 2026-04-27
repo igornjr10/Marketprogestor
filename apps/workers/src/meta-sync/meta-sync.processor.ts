@@ -4,9 +4,12 @@ import Redis from 'ioredis'
 import { randomUUID } from 'crypto'
 import { PrismaService } from './prisma.service'
 import { decrypt } from '@marketproads/crypto'
+import { Prisma } from '@marketproads/database'
 import { RateLimitHandler } from './rate-limit.handler'
 import { MetaApiAdapter } from '../integrations/meta-api.adapter'
 import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightRow, MetaBreakdownRow } from '../integrations/meta-api.types'
+
+const toJson = (v: unknown): Prisma.InputJsonValue => v as Prisma.InputJsonValue
 
 export const META_SYNC_QUEUE = 'meta-sync'
 export const META_SYNC_DLQ = `${META_SYNC_QUEUE}-dlq`
@@ -66,12 +69,6 @@ export class MetaSyncProcessor {
       {
         connection,
         concurrency: 5,
-        defaultJobOptions: {
-          attempts: 5,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: 500,
-          removeOnFail: 100,
-        },
       },
     )
 
@@ -178,7 +175,7 @@ export class MetaSyncProcessor {
   private async upsertCampaigns(campaigns: MetaCampaign[], adAccountId: string): Promise<void> {
     await Promise.all(
       campaigns.map((c) =>
-        this.prisma.campaign.upsert({
+        this.prisma.client.campaign.upsert({
           where: { metaCampaignId: c.id },
           create: {
             adAccountId,
@@ -209,7 +206,7 @@ export class MetaSyncProcessor {
   }
 
   private async loadCampaignMap(metaIds: string[]): Promise<Map<string, string>> {
-    const records = await this.prisma.campaign.findMany({
+    const records = await this.prisma.client.campaign.findMany({
       where: { metaCampaignId: { in: metaIds } },
       select: { id: true, metaCampaignId: true },
     })
@@ -221,7 +218,7 @@ export class MetaSyncProcessor {
       adSets.map((a) => {
         const campaignId = campaignMap.get(a.campaign_id)
         if (!campaignId) return Promise.resolve()
-        return this.prisma.adSet.upsert({
+        return this.prisma.client.adSet.upsert({
           where: { metaAdSetId: a.id },
           create: {
             campaignId,
@@ -230,7 +227,7 @@ export class MetaSyncProcessor {
             status: a.status,
             dailyBudget: a.daily_budget ?? null,
             lifetimeBudget: a.lifetime_budget ?? null,
-            targeting: a.targeting ?? {},
+            targeting: toJson(a.targeting ?? {}),
             optimizationGoal: a.optimization_goal,
             billingEvent: a.billing_event,
             startTime: new Date(a.start_time),
@@ -243,7 +240,7 @@ export class MetaSyncProcessor {
             status: a.status,
             dailyBudget: a.daily_budget ?? null,
             lifetimeBudget: a.lifetime_budget ?? null,
-            targeting: a.targeting ?? {},
+            targeting: toJson(a.targeting ?? {}),
             optimizationGoal: a.optimization_goal,
             billingEvent: a.billing_event,
             startTime: new Date(a.start_time),
@@ -256,7 +253,7 @@ export class MetaSyncProcessor {
   }
 
   private async loadAdSetMap(metaIds: string[]): Promise<Map<string, string>> {
-    const records = await this.prisma.adSet.findMany({
+    const records = await this.prisma.client.adSet.findMany({
       where: { metaAdSetId: { in: metaIds } },
       select: { id: true, metaAdSetId: true },
     })
@@ -268,7 +265,7 @@ export class MetaSyncProcessor {
       ads.map((ad) => {
         const adSetId = adSetMap.get(ad.adset_id)
         if (!adSetId) return Promise.resolve()
-        return this.prisma.ad.upsert({
+        return this.prisma.client.ad.upsert({
           where: { metaAdId: ad.id },
           create: {
             adSetId,
@@ -276,7 +273,7 @@ export class MetaSyncProcessor {
             name: ad.name,
             status: ad.status,
             creativeId: ad.creative_id,
-            creativeData: ad.creative ?? {},
+            creativeData: toJson(ad.creative ?? {}),
             createdTime: new Date(ad.created_time),
             updatedTime: new Date(ad.updated_time),
           },
@@ -285,7 +282,7 @@ export class MetaSyncProcessor {
             name: ad.name,
             status: ad.status,
             creativeId: ad.creative_id,
-            creativeData: ad.creative ?? {},
+            creativeData: toJson(ad.creative ?? {}),
             updatedTime: new Date(ad.updated_time),
           },
         })
@@ -352,13 +349,13 @@ export class MetaSyncProcessor {
           reach: Number(row.reach ?? 0),
           clicks: Number(row.clicks ?? 0),
           frequency: row.frequency != null ? Number(row.frequency) : null,
-          conversions: row.actions ?? [],
-          videoMetrics: row.video_30_sec_watched_actions ?? [],
-          breakdowns: row.breakdowns ?? null,
+          conversions: toJson(row.actions ?? []),
+          videoMetrics: toJson(row.video_30_sec_watched_actions ?? []),
+          breakdowns: row.breakdowns ? toJson(row.breakdowns) : Prisma.DbNull,
           raw: row as object,
         }
 
-        return this.prisma.insight.upsert({ where: { id }, create: { id, ...data }, update: data })
+        return this.prisma.client.insight.upsert({ where: { id }, create: { id, ...data }, update: data })
       }),
     )
     return count
@@ -403,12 +400,12 @@ export class MetaSyncProcessor {
           reach: 0,
           clicks: 0,
           frequency: null,
-          conversions: [],
-          videoMetrics: [],
-          breakdowns: breakdowns as object,
+          conversions: toJson([]),
+          videoMetrics: toJson([]),
+          breakdowns: toJson(breakdowns),
           raw: {},
         }
-        return this.prisma.insight.upsert({ where: { id }, create: { id, ...data }, update: { breakdowns: breakdowns as object } })
+        return this.prisma.client.insight.upsert({ where: { id }, create: { id, ...data }, update: { breakdowns: toJson(breakdowns) } })
       }),
     )
   }
@@ -422,7 +419,7 @@ export class MetaSyncProcessor {
       creatives.map((ad) => {
         const adSetId = adSetMap.get(ad.adset_id)
         if (!adSetId) return Promise.resolve()
-        return this.prisma.ad.upsert({
+        return this.prisma.client.ad.upsert({
           where: { metaAdId: ad.id },
           create: {
             adSetId,
@@ -430,11 +427,11 @@ export class MetaSyncProcessor {
             name: ad.name,
             status: ad.status,
             creativeId: ad.creative_id,
-            creativeData: ad.creative ?? {},
+            creativeData: toJson(ad.creative ?? {}),
             createdTime: new Date(),
             updatedTime: new Date(),
           },
-          update: { name: ad.name, status: ad.status, creativeId: ad.creative_id, creativeData: ad.creative ?? {}, updatedTime: new Date() },
+          update: { name: ad.name, status: ad.status, creativeId: ad.creative_id, creativeData: toJson(ad.creative ?? {}), updatedTime: new Date() },
         })
       }),
     )

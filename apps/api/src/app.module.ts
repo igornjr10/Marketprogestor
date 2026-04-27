@@ -9,6 +9,7 @@ import { CacheModule } from './cache/cache.module'
 import { AnalyticsModule } from './analytics/analytics.module'
 import { CreativeAnalysisModule } from './creatives/creative-analysis.module'
 import { AudienceAnalysisModule } from './audiences/audience-analysis.module'
+import { AlertsModule } from './alerts/alerts.module'
 import { envSchema } from './config/env.schema'
 
 @Module({
@@ -26,6 +27,7 @@ import { envSchema } from './config/env.schema'
     AnalyticsModule,
     CreativeAnalysisModule,
     AudienceAnalysisModule,
+    AlertsModule,
   ],
 })
 export class AppModule {}
