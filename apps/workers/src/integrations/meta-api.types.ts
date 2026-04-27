@@ -55,12 +55,29 @@ export type MetaInsightRow = {
   impressions: string
   reach: string
   clicks: string
+  frequency?: string
   actions?: Array<Record<string, unknown>>
   video_30_sec_watched_actions?: Array<Record<string, unknown>>
   breakdowns?: Record<string, unknown>
   campaign_id?: string
   adset_id?: string
   ad_id?: string
+}
+
+export type MetaBreakdownRow = {
+  spend: string
+  impressions: string
+  reach: string
+  clicks: string
+  frequency?: string
+  date_start: string
+  date_stop: string
+  age?: string
+  gender?: string
+  device_platform?: string
+  publisher_platform?: string
+  country?: string
+  campaign_id?: string
 }
 
 export type MetaPaginatedResponse<T> = {

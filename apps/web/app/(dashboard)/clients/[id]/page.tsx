@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowLeft, Wifi, WifiOff, RefreshCw, Trash2, BarChart2, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, Wifi, WifiOff, RefreshCw, Trash2, BarChart2, LayoutDashboard, Image, Users } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import {
   getClient,
@@ -180,17 +180,38 @@ export default function ClientDetailPage() {
       </div>
 
       {connection && (
-        <Link
-          href={`/clients/${id}/dashboard`}
-          className="flex items-center gap-2 rounded-lg border bg-card px-5 py-4 hover:bg-muted/50 transition-colors"
-        >
-          <LayoutDashboard className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <p className="font-semibold">Ver Dashboard</p>
-            <p className="text-sm text-muted-foreground">KPIs, gráficos e campanhas com métricas</p>
-          </div>
-          <ArrowLeft className="h-4 w-4 rotate-180 text-muted-foreground" />
-        </Link>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Link
+            href={`/clients/${id}/dashboard`}
+            className="flex items-center gap-2 rounded-lg border bg-card px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <LayoutDashboard className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="font-semibold">Dashboard</p>
+              <p className="text-xs text-muted-foreground">KPIs e métricas</p>
+            </div>
+          </Link>
+          <Link
+            href={`/clients/${id}/creatives`}
+            className="flex items-center gap-2 rounded-lg border bg-card px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <Image className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="font-semibold">Criativos</p>
+              <p className="text-xs text-muted-foreground">Galeria e fadiga</p>
+            </div>
+          </Link>
+          <Link
+            href={`/clients/${id}/audiences`}
+            className="flex items-center gap-2 rounded-lg border bg-card px-5 py-4 hover:bg-muted/50 transition-colors"
+          >
+            <Users className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="font-semibold">Públicos</p>
+              <p className="text-xs text-muted-foreground">Breakdowns demográficos</p>
+            </div>
+          </Link>
+        </div>
       )}
       {connection && <SyncStatusCard clientId={id} accessToken={accessToken} />}
       {connection && <InsightsSummaryCard clientId={id} accessToken={accessToken} />}

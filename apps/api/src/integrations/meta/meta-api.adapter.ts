@@ -196,4 +196,25 @@ export class MetaApiAdapter {
     const response = await this.request<any>(endpoint, { adset_id: options.adSetId, access_token: accessToken }, 'POST')
     return response.ad_id ? { id: response.ad_id } : response
   }
+
+  async fetchInsightsWithBreakdown(
+    adAccountId: string,
+    params: { since: string; until: string; breakdown: string; level?: string },
+    accessToken: string,
+  ): Promise<import('./meta-api.types').MetaBreakdownRow[]> {
+    const endpoint = `/${adAccountId}/insights`
+    const response = await this.request<import('./meta-api.types').MetaPaginatedResponse<import('./meta-api.types').MetaBreakdownRow>>(
+      endpoint,
+      {
+        fields: 'spend,impressions,reach,clicks,frequency',
+        breakdowns: params.breakdown,
+        level: params.level ?? 'campaign',
+        time_range: JSON.stringify({ since: params.since, until: params.until }),
+        limit: '500',
+        access_token: accessToken,
+      },
+      'GET',
+    )
+    return response.data ?? []
+  }
 }

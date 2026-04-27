@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common'
-import { MetaPaginatedResponse, MetaCampaign, MetaAdSet, MetaAd, MetaInsightRow, MetaCreativeRow } from './meta-api.types'
+import { MetaPaginatedResponse, MetaCampaign, MetaAdSet, MetaAd, MetaInsightRow, MetaCreativeRow, MetaBreakdownRow } from './meta-api.types'
 import { RateLimitHandler } from '../meta-sync/rate-limit.handler'
 
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
@@ -51,15 +51,32 @@ export class MetaApiAdapter {
       level,
       time_increment: '1',
       time_range: JSON.stringify({ since, until }),
-      fields: 'date_start,date_stop,spend,impressions,reach,clicks,actions,video_30_sec_watched_actions,breakdowns',
+      fields: 'date_start,date_stop,spend,impressions,reach,clicks,frequency,actions,video_30_sec_watched_actions',
       limit: '100',
+    })
+  }
+
+  async getInsightsWithBreakdown(
+    token: string,
+    adAccountId: string,
+    breakdown: string,
+    since: string,
+    until: string,
+  ): Promise<MetaBreakdownRow[]> {
+    return this.fetchAllPages<MetaBreakdownRow>(`/${adAccountId}/insights`, {
+      access_token: token,
+      level: 'campaign',
+      breakdowns: breakdown,
+      time_range: JSON.stringify({ since, until }),
+      fields: 'spend,impressions,reach,clicks,frequency,campaign_id',
+      limit: '500',
     })
   }
 
   async getAdCreatives(token: string, adAccountId: string): Promise<MetaCreativeRow[]> {
     return this.fetchAllPages<MetaCreativeRow>(`/${adAccountId}/ads`, {
       access_token: token,
-      fields: 'id,creative_id,adset_id,name,status,creative',
+      fields: 'id,creative_id,adset_id,name,status,creative{thumbnail_url,image_url,video_id,body,title,call_to_action_type,object_type}',
       limit: '100',
     })
   }

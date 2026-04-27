@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module'
 import { ClientsModule } from './clients/clients.module'
 import { CacheModule } from './cache/cache.module'
 import { AnalyticsModule } from './analytics/analytics.module'
+import { CreativeAnalysisModule } from './creatives/creative-analysis.module'
+import { AudienceAnalysisModule } from './audiences/audience-analysis.module'
 import { envSchema } from './config/env.schema'
 
 @Module({
@@ -22,6 +24,8 @@ import { envSchema } from './config/env.schema'
     ClientsModule,
     CampaignsModule,
     AnalyticsModule,
+    CreativeAnalysisModule,
+    AudienceAnalysisModule,
   ],
 })
 export class AppModule {}

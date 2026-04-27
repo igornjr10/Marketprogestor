@@ -48,3 +48,19 @@ export type MetaPaginatedResponse<T> = {
     next?: string
   }
 }
+
+export type MetaBreakdownRow = {
+  spend: string
+  impressions: string
+  reach: string
+  clicks: string
+  frequency?: string
+  date_start: string
+  date_stop: string
+  age?: string
+  gender?: string
+  device_platform?: string
+  publisher_platform?: string
+  country?: string
+  region?: string
+}

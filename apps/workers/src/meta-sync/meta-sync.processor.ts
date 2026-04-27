@@ -6,7 +6,7 @@ import { PrismaService } from './prisma.service'
 import { decrypt } from '@marketproads/crypto'
 import { RateLimitHandler } from './rate-limit.handler'
 import { MetaApiAdapter } from '../integrations/meta-api.adapter'
-import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightRow } from '../integrations/meta-api.types'
+import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightRow, MetaBreakdownRow } from '../integrations/meta-api.types'
 
 export const META_SYNC_QUEUE = 'meta-sync'
 export const META_SYNC_DLQ = `${META_SYNC_QUEUE}-dlq`
@@ -297,7 +297,12 @@ export class MetaSyncProcessor {
     const now = new Date()
     const since = new Date(now)
     since.setDate(now.getDate() - 3)
-    return this.syncInsights(adAccount, token, since, now)
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+    const [insightCount] = await Promise.all([
+      this.syncInsights(adAccount, token, since, now),
+      this.syncBreakdowns(adAccount, token, fmt(since), fmt(now)),
+    ])
+    return insightCount
   }
 
   private async syncInsightsHistorical(adAccount: ProcessableAdAccount, token: string): Promise<number> {
@@ -346,6 +351,7 @@ export class MetaSyncProcessor {
           impressions: Number(row.impressions ?? 0),
           reach: Number(row.reach ?? 0),
           clicks: Number(row.clicks ?? 0),
+          frequency: row.frequency != null ? Number(row.frequency) : null,
           conversions: row.actions ?? [],
           videoMetrics: row.video_30_sec_watched_actions ?? [],
           breakdowns: row.breakdowns ?? null,
@@ -356,6 +362,55 @@ export class MetaSyncProcessor {
       }),
     )
     return count
+  }
+
+  private async syncBreakdowns(adAccount: ProcessableAdAccount, token: string, since: string, until: string): Promise<void> {
+    const DIMENSIONS = ['age', 'gender', 'device_platform', 'publisher_platform'] as const
+    const results = await Promise.allSettled(
+      DIMENSIONS.map((dim) => this.metaApi.getInsightsWithBreakdown(token, adAccount.accountId, dim, since, until)),
+    )
+
+    const breakdownsByKey = new Map<string, Record<string, MetaBreakdownRow[]>>()
+
+    DIMENSIONS.forEach((dim, idx) => {
+      const result = results[idx]
+      if (result.status !== 'fulfilled') {
+        this.logger.warn(`Breakdown ${dim} failed for account ${adAccount.accountId}`)
+        return
+      }
+      for (const row of result.value) {
+        const campaignId = row.campaign_id
+        if (!campaignId) continue
+        const existing = breakdownsByKey.get(campaignId) ?? {}
+        const dimKey = dim === 'device_platform' ? 'device' : dim === 'publisher_platform' ? 'platform' : dim
+        existing[dimKey] = [...(existing[dimKey] ?? []), row]
+        breakdownsByKey.set(campaignId, existing)
+      }
+    })
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    await Promise.all(
+      Array.from(breakdownsByKey.entries()).map(([metaCampaignId, breakdowns]) => {
+        const id = `BREAKDOWN-${metaCampaignId}-${today.toISOString().slice(0, 10)}`
+        const data = {
+          entityType: 'CAMPAIGN' as const,
+          entityId: metaCampaignId,
+          date: today,
+          spend: 0,
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          frequency: null,
+          conversions: [],
+          videoMetrics: [],
+          breakdowns: breakdowns as object,
+          raw: {},
+        }
+        return this.prisma.insight.upsert({ where: { id }, create: { id, ...data }, update: { breakdowns: breakdowns as object } })
+      }),
+    )
   }
 
   private async syncCreatives(adAccount: ProcessableAdAccount, token: string): Promise<number> {

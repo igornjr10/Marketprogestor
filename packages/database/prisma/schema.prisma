@@ -312,6 +312,7 @@ model Insight {
   impressions  Int
   reach        Int
   clicks       Int
+  frequency    Float?
   conversions  Json
   videoMetrics Json
   breakdowns   Json?
