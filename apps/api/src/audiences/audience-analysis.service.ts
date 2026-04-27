@@ -89,13 +89,13 @@ export class AudienceAnalysisService {
       const dim1Values = rows1.map((r) => r.label)
       const dim2Values = rows2.map((r) => r.label)
 
-      // Estimate cross-spend proportionally: cell(d1,d2) ≈ (pct_d1 * pct_d2 * total)
+      // Estimate cross-spend proportionally: cell(d1,d2) ≈ pct_d1 * pct_d2 * total
       const cells: HeatmapCell[] = []
       for (const r1 of rows1) {
         for (const r2 of rows2) {
           const pct1 = totalSpend > 0 ? r1.spend / totalSpend : 0
           const pct2 = totalSpend > 0 ? r2.spend / totalSpend : 0
-          const estimatedSpend = totalSpend * pct1 * pct2 * dim1Values.length
+          const estimatedSpend = totalSpend * pct1 * pct2
           const pct = totalSpend > 0 ? round2((estimatedSpend / totalSpend) * 100) : 0
           cells.push({ dim1: r1.label, dim2: r2.label, spend: round2(estimatedSpend), pct })
         }

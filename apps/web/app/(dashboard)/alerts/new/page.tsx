@@ -37,6 +37,7 @@ type WizardState = {
   operator: 'AND' | 'OR'
   channels: AlertChannels
   cooldownMinutes: number
+  notifyEmail: string
 }
 
 const initial: WizardState = {
@@ -45,6 +46,7 @@ const initial: WizardState = {
   operator: 'AND',
   channels: { dashboard: true, email: false },
   cooldownMinutes: 60,
+  notifyEmail: '',
 }
 
 export default function NewAlertPage() {
@@ -82,6 +84,7 @@ export default function NewAlertPage() {
       rule: { conditions: state.conditions, operator: state.operator },
       channels: state.channels,
       cooldownMinutes: state.cooldownMinutes,
+      notifyEmail: state.channels.email && state.notifyEmail ? state.notifyEmail : undefined,
     }
     mutation.mutate(dto)
   }
@@ -310,6 +313,18 @@ function Step3({ state, setState, onBack, onNext }: {
             />
             <span className="text-sm">Email (via Resend)</span>
           </label>
+          {state.channels.email && (
+            <div className="ml-6">
+              <label className="text-sm font-medium">E-mail para notificação *</label>
+              <input
+                type="email"
+                value={state.notifyEmail}
+                onChange={(e) => setState((s) => ({ ...s, notifyEmail: e.target.value }))}
+                placeholder="nome@empresa.com"
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          )}
         </div>
         <div>
           <label className="text-sm font-medium">Cooldown entre disparos</label>
@@ -376,6 +391,12 @@ function Step4({ state, onBack, onSubmit, isPending }: {
               {[state.channels.dashboard && 'Dashboard', state.channels.email && 'Email'].filter(Boolean).join(', ')}
             </span>
           </div>
+          {state.channels.email && state.notifyEmail && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">E-mail</span>
+              <span className="font-medium">{state.notifyEmail}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Cooldown</span>
             <span className="font-medium">{state.cooldownMinutes}min</span>

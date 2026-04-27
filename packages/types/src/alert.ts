@@ -28,6 +28,7 @@ export type AlertDto = {
   rule: AlertRule
   channels: AlertChannels
   cooldownMinutes: number
+  notifyEmail?: string | null
   isActive: boolean
   createdBy: string
   createdAt: string
@@ -56,6 +57,7 @@ export type CreateAlertDto = {
   rule: AlertRule
   channels: AlertChannels
   cooldownMinutes?: number
+  notifyEmail?: string
 }
 
 export type UpdateAlertDto = Partial<CreateAlertDto> & { isActive?: boolean }

@@ -365,6 +365,7 @@ model Alert {
   ruleJson        Json
   channels        Json
   cooldownMinutes Int      @default(60)
+  notifyEmail     String?
   isActive        Boolean  @default(true)
   createdBy       String
   createdAt       DateTime @default(now())

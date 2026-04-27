@@ -173,7 +173,7 @@ export class MetaSyncProcessor {
   }
 
   private async upsertCampaigns(campaigns: MetaCampaign[], adAccountId: string): Promise<void> {
-    await Promise.all(
+    const results = await Promise.allSettled(
       campaigns.map((c) =>
         this.prisma.client.campaign.upsert({
           where: { metaCampaignId: c.id },
@@ -203,6 +203,8 @@ export class MetaSyncProcessor {
         }),
       ),
     )
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) this.logger.warn(`${failed.length}/${campaigns.length} campaign upserts failed`)
   }
 
   private async loadCampaignMap(metaIds: string[]): Promise<Map<string, string>> {
@@ -214,7 +216,7 @@ export class MetaSyncProcessor {
   }
 
   private async upsertAdSets(adSets: MetaAdSet[], campaignMap: Map<string, string>): Promise<void> {
-    await Promise.all(
+    const results = await Promise.allSettled(
       adSets.map((a) => {
         const campaignId = campaignMap.get(a.campaign_id)
         if (!campaignId) return Promise.resolve()
@@ -250,6 +252,8 @@ export class MetaSyncProcessor {
         })
       }),
     )
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) this.logger.warn(`${failed.length}/${adSets.length} adSet upserts failed`)
   }
 
   private async loadAdSetMap(metaIds: string[]): Promise<Map<string, string>> {
@@ -261,7 +265,7 @@ export class MetaSyncProcessor {
   }
 
   private async upsertAds(ads: MetaAd[], adSetMap: Map<string, string>): Promise<void> {
-    await Promise.all(
+    const results = await Promise.allSettled(
       ads.map((ad) => {
         const adSetId = adSetMap.get(ad.adset_id)
         if (!adSetId) return Promise.resolve()
@@ -288,6 +292,8 @@ export class MetaSyncProcessor {
         })
       }),
     )
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) this.logger.warn(`${failed.length}/${ads.length} ad upserts failed`)
   }
 
   private async syncInsightsFresh(adAccount: ProcessableAdAccount, token: string): Promise<number> {

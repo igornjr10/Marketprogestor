@@ -13,9 +13,27 @@ type DbAlert = {
   ruleJson: unknown
   channels: unknown
   cooldownMinutes: number
+  notifyEmail: string | null
 }
 
 type AlertChannel = { email?: boolean; dashboard: boolean }
+
+function parseDbAlertRule(json: unknown): AlertRule | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null
+  const r = json as Record<string, unknown>
+  if (!Array.isArray(r['conditions']) || r['conditions'].length === 0) return null
+  if (r['operator'] !== 'AND' && r['operator'] !== 'OR') return null
+  return json as AlertRule
+}
+
+function parseDbAlertChannels(json: unknown): AlertChannel {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return { dashboard: true }
+  const c = json as Record<string, unknown>
+  return {
+    dashboard: c['dashboard'] !== false,
+    email: c['email'] === true,
+  }
+}
 
 @Injectable()
 export class AlertEvaluationService {
@@ -35,6 +53,7 @@ export class AlertEvaluationService {
 
     const alerts = await this.prisma.client.alert.findMany({
       where: { isActive: true },
+      select: { id: true, tenantId: true, clientId: true, name: true, ruleJson: true, channels: true, cooldownMinutes: true, notifyEmail: true },
     }) as DbAlert[]
 
     if (alerts.length === 0) return
@@ -44,7 +63,11 @@ export class AlertEvaluationService {
   }
 
   private async evaluateAlert(alert: DbAlert) {
-    const rule = alert.ruleJson as AlertRule
+    const rule = parseDbAlertRule(alert.ruleJson)
+    if (!rule) {
+      this.logger.warn(`Alert ${alert.id} has invalid ruleJson, skipping`)
+      return
+    }
 
     try {
       const clientIds = await this.resolveClientIds(alert)
@@ -83,7 +106,6 @@ export class AlertEvaluationService {
     campaign: { metaCampaignId: string; name: string },
     allInsights: InsightMetricRow[],
   ) {
-    const maxDays = maxPeriodDays(rule)
     const primaryPeriod = rule.conditions[0]?.period ?? '7d'
     const primaryDays = periodDays(primaryPeriod)
 
@@ -99,9 +121,10 @@ export class AlertEvaluationService {
     const result = evaluateRule(rule, currentRows, previousRows)
     if (!result.triggers) return
 
+    // B2: Atomic cooldown — SET NX before creating event to prevent race conditions
     const cooldownKey = `alert:cooldown:${alert.id}:${campaign.metaCampaignId}`
-    const inCooldown = await this.redis.exists(cooldownKey)
-    if (inCooldown) return
+    const acquired = await this.redis.set(cooldownKey, '1', 'EX', alert.cooldownMinutes * 60, 'NX')
+    if (!acquired) return
 
     await this.prisma.client.alertEvent.create({
       data: {
@@ -115,16 +138,12 @@ export class AlertEvaluationService {
       },
     })
 
-    await this.redis.set(cooldownKey, '1', 'EX', alert.cooldownMinutes * 60)
-
-    const channels = alert.channels as AlertChannel
-    if (channels.email) {
+    const channels = parseDbAlertChannels(alert.channels)
+    if (channels.email && alert.notifyEmail) {
       await this.sendEmailNotification(alert, campaign.name, result.metricValue)
     }
 
-    // Invalidate badge cache for tenant
     await this.redis.del(`alerts:badge:${alert.tenantId}`)
-
     this.logger.log(`Alert ${alert.id} triggered for campaign ${campaign.name} (value: ${result.metricValue})`)
   }
 
@@ -144,12 +163,13 @@ export class AlertEvaluationService {
     metricValue: number,
   ) {
     const apiKey = process.env['RESEND_API_KEY']
-    if (!apiKey) return
+    const from = process.env['RESEND_FROM'] ?? 'alertas@marketproads.com.br'
+    if (!apiKey || !alert.notifyEmail) return
 
     try {
       const body = JSON.stringify({
-        from: 'alertas@marketproads.com.br',
-        to: ['contato@marketproads.com'],
+        from,
+        to: [alert.notifyEmail],
         subject: `[MarketProAds] Alerta: ${alert.name}`,
         html: `
           <h2>Alerta disparado: ${alert.name}</h2>
@@ -159,11 +179,17 @@ export class AlertEvaluationService {
         `,
       })
 
-      await fetch('https://api.resend.com/emails', {
+      // M1: Check HTTP response status
+      const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body,
       })
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        this.logger.warn(`Resend error ${res.status}: ${text}`)
+      }
     } catch (err) {
       this.logger.warn(`Failed to send alert email: ${String(err)}`)
     }

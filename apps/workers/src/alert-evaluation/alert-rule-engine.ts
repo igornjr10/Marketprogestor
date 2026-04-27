@@ -42,8 +42,10 @@ export function computeMetrics(rows: InsightMetricRow[]): ComputedMetrics {
   const clicks = rows.reduce((s, r) => s + r.clicks, 0)
   const freqSum = rows.reduce((s, r) => s + (r.frequency ?? 0), 0)
 
+  const isConvRow = (x: unknown): x is Record<string, string> =>
+    typeof x === 'object' && x !== null && !Array.isArray(x)
   const actions = rows.flatMap((r) =>
-    Array.isArray(r.conversions) ? (r.conversions as Array<Record<string, string>>) : [],
+    Array.isArray(r.conversions) ? r.conversions.filter(isConvRow) : [],
   )
   const conversionCount = actions
     .filter((a) => a['action_type'] === 'purchase' || a['action_type'] === 'lead')

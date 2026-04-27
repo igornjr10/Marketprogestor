@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { CacheService } from '../cache/cache.service'
+import { parseAlertRule, parseAlertChannels } from './alert-schemas'
 import type {
   AlertDto, AlertEventDto, CreateAlertDto, UpdateAlertDto,
   AlertTestResult, AlertRule, AlertCondition,
@@ -30,20 +31,27 @@ export class AlertsService {
       orderBy: { createdAt: 'desc' },
     })
 
-    return alerts.map((a) => ({
-      id: a.id,
-      tenantId: a.tenantId,
-      clientId: a.clientId,
-      name: a.name,
-      description: a.description,
-      rule: a.ruleJson as AlertRule,
-      channels: a.channels as { email?: boolean; dashboard: boolean },
-      cooldownMinutes: a.cooldownMinutes,
-      isActive: a.isActive,
-      createdBy: a.createdBy,
-      createdAt: a.createdAt.toISOString(),
-      openEventCount: a._count.alertEvents,
-    }))
+    return alerts.flatMap((a) => {
+      try {
+        return [{
+          id: a.id,
+          tenantId: a.tenantId,
+          clientId: a.clientId,
+          name: a.name,
+          description: a.description,
+          rule: parseAlertRule(a.ruleJson),
+          channels: parseAlertChannels(a.channels),
+          cooldownMinutes: a.cooldownMinutes,
+          notifyEmail: a.notifyEmail,
+          isActive: a.isActive,
+          createdBy: a.createdBy,
+          createdAt: a.createdAt.toISOString(),
+          openEventCount: a._count.alertEvents,
+        }]
+      } catch {
+        return []
+      }
+    })
   }
 
   async createAlert(tenantId: string, userId: string, dto: CreateAlertDto): Promise<AlertDto> {
@@ -58,6 +66,7 @@ export class AlertsService {
         ruleJson: dto.rule as object,
         channels: (dto.channels ?? { dashboard: true }) as object,
         cooldownMinutes: dto.cooldownMinutes ?? 60,
+        notifyEmail: dto.notifyEmail ?? null,
         createdBy: userId,
       },
       include: { _count: { select: { alertEvents: { where: { status: 'OPEN' } } } } },
@@ -69,9 +78,10 @@ export class AlertsService {
       clientId: alert.clientId,
       name: alert.name,
       description: alert.description,
-      rule: alert.ruleJson as AlertRule,
-      channels: alert.channels as { email?: boolean; dashboard: boolean },
+      rule: parseAlertRule(alert.ruleJson),
+      channels: parseAlertChannels(alert.channels),
       cooldownMinutes: alert.cooldownMinutes,
+      notifyEmail: alert.notifyEmail,
       isActive: alert.isActive,
       createdBy: alert.createdBy,
       createdAt: alert.createdAt.toISOString(),
@@ -102,9 +112,10 @@ export class AlertsService {
       clientId: updated.clientId,
       name: updated.name,
       description: updated.description,
-      rule: updated.ruleJson as AlertRule,
-      channels: updated.channels as { email?: boolean; dashboard: boolean },
+      rule: parseAlertRule(updated.ruleJson),
+      channels: parseAlertChannels(updated.channels),
       cooldownMinutes: updated.cooldownMinutes,
+      notifyEmail: updated.notifyEmail,
       isActive: updated.isActive,
       createdBy: updated.createdBy,
       createdAt: updated.createdAt.toISOString(),
@@ -139,7 +150,7 @@ export class AlertsService {
       entityId: e.entityId,
       entityName: e.entityName,
       metricValue: e.metricValue,
-      ruleSnapshot: e.ruleSnapshot as AlertRule,
+      ruleSnapshot: (() => { try { return parseAlertRule(e.ruleSnapshot) } catch { return e.ruleSnapshot as AlertRule } })(),
       status: e.status,
       resolvedAt: e.resolvedAt?.toISOString() ?? null,
     }))
@@ -173,7 +184,7 @@ export class AlertsService {
 
   async testAlert(tenantId: string, alertId: string): Promise<AlertTestResult> {
     const alert = await this.assertAlertAccess(tenantId, alertId)
-    const rule = alert.ruleJson as AlertRule
+    const rule = parseAlertRule(alert.ruleJson)
 
     const clientIds = alert.clientId
       ? [alert.clientId]
@@ -182,7 +193,7 @@ export class AlertsService {
     const campaigns = await this.prisma.client.campaign.findMany({
       where: { adAccount: { clientId: { in: clientIds } } },
       select: { metaCampaignId: true, name: true },
-      take: 20,
+      take: 500,  // bounded to prevent runaway queries; alerts are per-tenant
     })
 
     let entitiesMatching = 0
@@ -254,7 +265,9 @@ export class AlertsService {
     const clicks = rows.reduce((s, r) => s + r.clicks, 0)
     const frequency = rows.reduce((s, r) => s + (r.frequency ?? 0), 0) / rows.length
 
-    const actions = rows.flatMap((r) => (Array.isArray(r.conversions) ? r.conversions as Array<Record<string, string>> : []))
+    const isConvRow = (x: unknown): x is Record<string, string> =>
+      typeof x === 'object' && x !== null && !Array.isArray(x)
+    const actions = rows.flatMap((r) => Array.isArray(r.conversions) ? r.conversions.filter(isConvRow) : [])
     const conversions = actions.filter((a) => a['action_type'] === 'purchase' || a['action_type'] === 'lead')
       .reduce((s, a) => s + parseFloat(a['value'] ?? '0'), 0)
 
